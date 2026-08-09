@@ -31,6 +31,13 @@ namespace XboxGamingBarHelper.Settings
             get { return onScreenDisplayProvider; }
         }
 
+        private readonly LegionSteamInputModeProperty legionSteamInputMode;
+        public LegionSteamInputModeProperty LegionSteamInputMode
+        {
+            get { return legionSteamInputMode; }
+        }
+
+
         private readonly IsForegroundProperty isForeground;
         public IsForegroundProperty IsForeground
         {
@@ -258,7 +265,9 @@ namespace XboxGamingBarHelper.Settings
         {
             autoStartRTSS = new AutoStartRTSSProperty(this);
             onScreenDisplayProvider = new OnScreenDisplayProviderProperty(this);
+            legionSteamInputMode = new LegionSteamInputModeProperty(this);
             isForeground = new IsForegroundProperty(this);
+
             useManufacturerWMI = new UseManufacturerWMIProperty(this);
             tdpMethod = new TdpMethodProperty(this);
             emulationBackend = new EmulationBackendProperty(this);
