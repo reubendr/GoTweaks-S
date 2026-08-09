@@ -20,6 +20,7 @@ namespace XboxGamingBar
 
         private readonly AutoStartRTSSProperty autoStartRTSS;
         private readonly OnScreenDisplayProviderProperty onScreenDisplayProvider;
+        private readonly LegionSteamInputModeProperty legionSteamInputMode;
 
         private readonly WidgetProperties properties;
 
@@ -32,8 +33,10 @@ namespace XboxGamingBar
 
             autoStartRTSS = new AutoStartRTSSProperty(AutoStartRTSSToggle, this);
             onScreenDisplayProvider = new OnScreenDisplayProviderProperty(OnScreenDisplayProviderRadioButtons, this);
-            properties = new WidgetProperties(autoStartRTSS);
+            legionSteamInputMode = new LegionSteamInputModeProperty(LegionSteamInputToggle, this);
+            properties = new WidgetProperties(autoStartRTSS, onScreenDisplayProvider, legionSteamInputMode);
         }
+
 
         protected async override void OnNavigatedTo(NavigationEventArgs e)
         {
