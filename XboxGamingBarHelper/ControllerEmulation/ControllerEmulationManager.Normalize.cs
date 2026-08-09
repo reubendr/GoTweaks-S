@@ -745,6 +745,22 @@ namespace XboxGamingBarHelper.ControllerEmulation
                 StopForwarding();
                 suppressionPausedForGameBar = false;
                 suppressionPauseUntilTicksUtc = 0;
+                // VIIPER/HidHide no longer cloak the pad, but the button monitor may have
+                // left firmware register 04/0f in vendor-exclusive mode during a prior emu
+                // session (or the 3s keep-alive reset it). Restore physical XInput unless the
+                // user explicitly toggled "Disable OS Reporting" in Legion Controller Settings.
+                try
+                {
+                    bool osReportingDisabled = legionManager?.LegionOsReportingDisabled?.Value ?? false;
+                    if (!osReportingDisabled)
+                    {
+                        Labs.LegionButtonMonitor.Current?.SetPhysicalXInputEnabled(true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Debug($"Restore physical XInput after CE off failed: {ex.Message}");
+                }
                 Logger.Info($"Controller emulation disabled ({reason}); forwarding stopped");
                 return;
             }

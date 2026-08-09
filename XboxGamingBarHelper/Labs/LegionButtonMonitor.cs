@@ -1513,6 +1513,7 @@ namespace XboxGamingBarHelper.Labs
                             _highQualityGyroConfigured = false;
                             _reportStreamWoken = false;
                             Logger.Info($"LegionButtonMonitor: Cached device path worked! VID:{_detectedVid:X4} PID:{_detectedPid:X4}");
+                            FinalizeLegionControllerConnection(cachedHandle);
                             return true;
                         }
                         else
@@ -1626,6 +1627,7 @@ namespace XboxGamingBarHelper.Labs
                                                 _loggedControllerNotFound = false;
                                                 _consecutiveAllRejectedScans = 0;
                                                 _loggedIncompatibleBackoff = false;
+                                                FinalizeLegionControllerConnection(handle);
                                                 return true;
                                             }
                                             else
@@ -2280,6 +2282,17 @@ namespace XboxGamingBarHelper.Labs
                     // pill updates immediately rather than on the next poll.
                     QueryInputMode();
                 }
+                else
+                {
+                    // The 3s keep-alive (01 04) can reset firmware register 04/0f to
+                    // vendor-exclusive on newer Legion firmware, killing physical XInput
+                    // until 04/0f=0x01 is written again. Coexistence was only sent once
+                    // per connect (_reportStreamWoken), so every subsequent heartbeat left
+                    // Steam/gamepad-tester with no inputs until GoTweaks exited or Legion
+                    // Space revived the pad. Re-assert XInput output after each keep-alive
+                    // whenever emulation is not actively suppressing the stock pad.
+                    ReassertPhysicalXInputOutput(handle);
+                }
 
                 return true;
             }
@@ -2447,6 +2460,63 @@ namespace XboxGamingBarHelper.Labs
                 }
             }
             catch (Exception ex) { Logger.Warn($"ApplyFrontButtonFirmwareState failed: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// Run the full init/coexistence sequence immediately after the vendor HID handle
+        /// opens. Previously this waited up to 3s for the first monitor-loop heartbeat,
+        /// leaving physical XInput dead on firmware that requires 04/0f=0x01 before Steam
+        /// can see the pad.
+        /// </summary>
+        private void FinalizeLegionControllerConnection(SafeFileHandle handle)
+        {
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess)
+            {
+                return;
+            }
+
+            try
+            {
+                InitializeController(handle);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"LegionButtonMonitor: FinalizeLegionControllerConnection failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Re-write firmware register 04/0f (global + each half) to keep physical XInput
+        /// alive alongside the vendor HID stream. No-op while controller emulation has
+        /// requested XInput suppression.
+        /// </summary>
+        private void ReassertPhysicalXInputOutput(SafeFileHandle handle)
+        {
+            if (handle == null || handle.IsInvalid || !_hasWriteAccess || _physicalXInputSuppressed)
+            {
+                return;
+            }
+
+            try
+            {
+                int ok = 0;
+                foreach (byte[] cmd in BuildXInputOutputRegisterCommands())
+                {
+                    if (SendOutputReport(handle, cmd, "xinput-output reassert"))
+                    {
+                        ok++;
+                    }
+                    Thread.Sleep(20);
+                }
+                if (ok > 0)
+                {
+                    Logger.Debug($"LegionButtonMonitor: Reasserted physical XInput output ({ok}/3 04/0f writes)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"LegionButtonMonitor: ReassertPhysicalXInputOutput failed: {ex.Message}");
+            }
         }
 
         /// <summary>
