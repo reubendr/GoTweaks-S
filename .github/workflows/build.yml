@@ -7,6 +7,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -34,31 +37,41 @@ jobs:
         continue-on-error: true
 
       - name: Build app package (Release x64)
-        run: >
-          msbuild XboxGamingBarPackage\XboxGamingBarPackage.wapproj
-          /p:Configuration=Release
-          /p:Platform=x64
-          /p:AppxPackageDir=D:\AppPackages\
-          /p:AppxBundle=Never
-          /p:AppxPackageSigningEnabled=true
-          /p:UapAppxPackageBuildMode=SideloadOnly
-          /p:GenerateAppxPackageOnBuild=true
-          /flp:logfile=msbuild-errors.txt;errorsonly
-          /restore
-          /m
+        shell: pwsh
+        run: |
+          $mbArgs = @(
+            'XboxGamingBarPackage\XboxGamingBarPackage.wapproj',
+            '/p:Configuration=Release',
+            '/p:Platform=x64',
+            '/p:AppxPackageDir=D:\AppPackages\',
+            '/p:AppxBundle=Never',
+            '/p:AppxPackageSigningEnabled=true',
+            '/p:UapAppxPackageBuildMode=SideloadOnly',
+            '/p:GenerateAppxPackageOnBuild=true',
+            '/restore',
+            '/m'
+          )
+          & msbuild @mbArgs 2>&1 | Tee-Object -FilePath build-full.log
+          exit $LASTEXITCODE
 
-      - name: Report build errors
+      - name: Publish error log to ci-logs branch
         if: failure()
         shell: pwsh
         run: |
-          "## MSBuild errors" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "```" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          if (Test-Path msbuild-errors.txt) {
-            Get-Content msbuild-errors.txt -TotalCount 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          } else {
-            "no msbuild-errors.txt produced" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
-          "```" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if (-not (Test-Path build-full.log)) { "no build-full.log" | Out-File build-full.log }
+          $lines = Get-Content build-full.log
+          $errs = $lines | Select-String -Pattern 'error|Error ' | Select-Object -Last 80
+          $tail = $lines | Select-Object -Last 120
+          $out = @("=== ERROR LINES ===") + $errs + @("", "=== TAIL ===") + $tail
+          New-Item -ItemType Directory -Force -Path ci-report | Out-Null
+          $out | Out-File -FilePath ci-report/errors.txt -Encoding utf8
+          git config user.name "ci"
+          git config user.email "ci@example.com"
+          git checkout --orphan ci-logs
+          git rm -r --cached . | Out-Null
+          git add -f ci-report/errors.txt
+          git commit -m "CI error report"
+          git push -f origin ci-logs
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
