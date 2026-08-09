@@ -43,8 +43,22 @@ jobs:
           /p:AppxPackageSigningEnabled=true
           /p:UapAppxPackageBuildMode=SideloadOnly
           /p:GenerateAppxPackageOnBuild=true
+          /flp:logfile=msbuild-errors.txt;errorsonly
           /restore
           /m
+
+      - name: Report build errors
+        if: failure()
+        shell: pwsh
+        run: |
+          "## MSBuild errors" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "```" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if (Test-Path msbuild-errors.txt) {
+            Get-Content msbuild-errors.txt -TotalCount 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            "no msbuild-errors.txt produced" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+          "```" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
