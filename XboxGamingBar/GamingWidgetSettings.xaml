@@ -16,7 +16,9 @@
                     <RowDefinition x:Name="Row_0_ProgressRing" Height="Auto"/>
                     <RowDefinition x:Name="Row_1_AutoManageRTSS" Height="36"/>
                     <RowDefinition x:Name="Row_2_OverlayMethod" Height="100"/>
+                    <RowDefinition x:Name="Row_3_LegionSteamInput" Height="Auto"/>
                 </Grid.RowDefinitions>
+
 
                 <TextBlock x:Name="AutoStartRTSSText" Text="Auto Start RTSS" FontWeight="SemiBold" FontSize="18" Grid.Row="1"
                     TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Width="250" HorizontalAlignment="Left" VerticalAlignment="Center"/>
@@ -27,7 +29,13 @@
                     <RadioButton Content="Rivatuner Statistics Server" IsChecked="True"/>
                     <RadioButton Content="AMD Software: Adrenaline Edition" IsChecked="False" />
                 </controls:RadioButtons>
+
+                <TextBlock x:Name="LegionSteamInputText" Text="Steam Input + Legion L/R + back buttons" FontWeight="SemiBold" FontSize="18" Grid.Row="3"
+                    TextWrapping="Wrap" Width="250" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                <ToggleSwitch x:Name="LegionSteamInputToggle" IsEnabled="False" OffContent="Off" OnContent="On"
+                    FlowDirection="RightToLeft" Grid.Row="3" VerticalAlignment="Center" HorizontalAlignment="Right" />
             </Grid>
+
         </Grid>
     </ScrollViewer>
 </Page>
