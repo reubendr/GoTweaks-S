@@ -29,25 +29,28 @@ jobs:
           nuget-version: latest
 
       - name: Restore NuGet packages
-        run: nuget restore XboxGamingBar.sln
-      
-      - name: Build solution (Release x64)
+        run: |
+          nuget restore XboxGamingBar.sln
+        continue-on-error: true
+
+      - name: Build app package (Release x64)
         run: >
-          msbuild XboxGamingBar.sln
+          msbuild XboxGamingBarPackage\XboxGamingBarPackage.wapproj
           /p:Configuration=Release
           /p:Platform=x64
-          /p:AppxPackageDir=D:\\AppPackages\
-          /p:AppxBundle=Always
-          /p:UapAppxPackageBuildMode=StoreUpload
+          /p:AppxPackageDir=D:\AppPackages\
+          /p:AppxBundle=Never
+          /p:AppxPackageSigningEnabled=true
+          /p:UapAppxPackageBuildMode=SideloadOnly
           /p:GenerateAppxPackageOnBuild=true
           /restore
+          /m
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GoTweaks-Release-x64
           path: |
-            D:\\AppPackages\**
-            XboxGamingBar\\AppPackages\**
-            XboxGamingBarPackage\\AppPackages\**
+            D:\AppPackages\**
+            XboxGamingBarPackage\AppPackages\**
           if-no-files-found: warn
