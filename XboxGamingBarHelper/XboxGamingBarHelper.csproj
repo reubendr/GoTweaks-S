@@ -561,7 +561,9 @@
     <Compile Include="RTSS\RTSSFPSLimiter.cs" />
     <Compile Include="RTSS\RTSSManager.cs" />
     <Compile Include="Settings\AutoStartRTSSProperty.cs" />
+    <Compile Include="Settings\LegionSteamInputModeProperty.cs" />
     <Compile Include="Settings\UseManufacturerWMIProperty.cs" />
+
     <Compile Include="Settings\TdpMethodProperty.cs" />
     <Compile Include="Settings\EmulationBackendProperty.cs" />
     <Compile Include="ControllerEmulation\Viiper\LibViiper.cs" />
