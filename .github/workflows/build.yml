@@ -109,13 +109,17 @@ jobs:
           git commit -m "CI error report"
           git push -f origin ci-logs
 
+      - name: Collect artifacts into workspace
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          if (Test-Path D:\AppPackages) { Copy-Item -Path D:\AppPackages\* -Destination artifacts -Recurse -Force }
+          if (Test-Path GoTweaks-S-CI.cer) { Copy-Item GoTweaks-S-CI.cer artifacts -Force }
+          Get-ChildItem -Recurse artifacts | Select-Object -First 40 FullName
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GoTweaks-Release-x64
-          path: |
-            D:\AppPackages\**
-            GoTweaks-S-CI.cer
-            XboxGamingBarPackage\AppPackages\**
-          if-no-files-found: warn
-
+          path: artifacts/**
+          if-no-files-found: error
