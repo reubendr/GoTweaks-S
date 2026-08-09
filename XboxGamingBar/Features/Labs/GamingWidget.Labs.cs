@@ -43,6 +43,15 @@ namespace XboxGamingBar
 {
     public sealed partial class GamingWidget
     {
+        // Legion L/R Special Remapping combo indices (Click + Hold share the same list).
+        private const int LegionActionMaxUiIndex = 9;
+
+        private static int MapLegionActionUiIndexToHelperType(int selection)
+        {
+            if (selection <= 0) return 0;
+            return Math.Min(selection - 1, LegionActionMaxUiIndex - 1);
+        }
+
         private void InitializeLabsSection()
         {
             // Create DAService status polling timer (only runs when Legion tab is visible)
@@ -501,7 +510,7 @@ namespace XboxGamingBar
                 // Load Legion L settings
                 if (settings.Values.TryGetValue("LegionL_Action", out var lAction) && lAction is int lActionInt)
                 {
-                    if (LegionLActionComboBox != null && lActionInt >= 0 && lActionInt <= 7)
+                    if (LegionLActionComboBox != null && lActionInt >= 0 && lActionInt <= LegionActionMaxUiIndex)
                         LegionLActionComboBox.SelectedIndex = lActionInt;
                 }
                 if (settings.Values.TryGetValue("LegionL_Shortcut", out var lShortcut) && lShortcut is string lShortcutStr)
@@ -517,7 +526,7 @@ namespace XboxGamingBar
                 // Load Legion R settings
                 if (settings.Values.TryGetValue("LegionR_Action", out var rAction) && rAction is int rActionInt)
                 {
-                    if (LegionRActionComboBox != null && rActionInt >= 0 && rActionInt <= 7)
+                    if (LegionRActionComboBox != null && rActionInt >= 0 && rActionInt <= LegionActionMaxUiIndex)
                         LegionRActionComboBox.SelectedIndex = rActionInt;
                 }
                 if (settings.Values.TryGetValue("LegionR_Shortcut", out var rShortcut) && rShortcut is string rShortcutStr)
@@ -532,7 +541,7 @@ namespace XboxGamingBar
 
                 // Long-press variants
                 if (settings.Values.TryGetValue("LegionL_LongAction", out var lLongA) && lLongA is int lLongAi &&
-                    LegionLLongActionComboBox != null && lLongAi >= 0 && lLongAi <= 7)
+                    LegionLLongActionComboBox != null && lLongAi >= 0 && lLongAi <= LegionActionMaxUiIndex)
                     LegionLLongActionComboBox.SelectedIndex = lLongAi;
                 if (settings.Values.TryGetValue("LegionL_LongShortcut", out var lLongS) && lLongS is string lLongSs)
                     LoadKeysFromString("LegionLLong", lLongSs, FindName("LegionLLongKeyTags") as ItemsControl);
@@ -540,7 +549,7 @@ namespace XboxGamingBar
                     FindName("LegionLLongCommandTextBox") is TextBox lLongTb)
                     lLongTb.Text = lLongCs;
                 if (settings.Values.TryGetValue("LegionR_LongAction", out var rLongA) && rLongA is int rLongAi &&
-                    LegionRLongActionComboBox != null && rLongAi >= 0 && rLongAi <= 7)
+                    LegionRLongActionComboBox != null && rLongAi >= 0 && rLongAi <= LegionActionMaxUiIndex)
                     LegionRLongActionComboBox.SelectedIndex = rLongAi;
                 if (settings.Values.TryGetValue("LegionR_LongShortcut", out var rLongS) && rLongS is string rLongSs)
                     LoadKeysFromString("LegionRLong", rLongSs, FindName("LegionRLongKeyTags") as ItemsControl);
@@ -641,7 +650,7 @@ namespace XboxGamingBar
 
                 int selection = actionComboBox.SelectedIndex;
                 bool enabled = selection > 0;
-                int actionType = selection == 1 ? 0 : selection == 2 ? 1 : selection == 3 ? 2 : selection == 4 ? 3 : selection == 5 ? 4 : selection == 6 ? 5 : selection == 7 ? 6 : 0;
+                int actionType = MapLegionActionUiIndexToHelperType(selection);
 
                 string shortcutOrCommand = "";
                 if (selection == 2)
@@ -702,7 +711,7 @@ namespace XboxGamingBar
                 int selection = actionComboBox.SelectedIndex; // 0=Disabled, 1=Xbox Guide, 2=Shortcut, 3=Command, 4=Focus GoTweaks
                 bool enabled = selection != 0;
                 // Convert UI selection to helper action type: 0=Xbox Guide, 1=Shortcut, 2=Command, 3=Focus GoTweaks
-                int actionType = selection == 1 ? 0 : selection == 2 ? 1 : selection == 3 ? 2 : selection == 4 ? 3 : selection == 5 ? 4 : selection == 6 ? 5 : selection == 7 ? 6 : 0;
+                int actionType = MapLegionActionUiIndexToHelperType(selection);
 
                 string shortcutOrCommand = "";
                 if (selection == 2)

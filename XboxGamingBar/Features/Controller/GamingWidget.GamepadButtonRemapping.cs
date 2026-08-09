@@ -284,7 +284,7 @@ namespace XboxGamingBar
 
             // Add the key (LegionGamepadKeyComboBox is 1-indexed since 0 is "+ Key")
             // The key code is based on the combo box item order
-            var keyCode = GetKeyCodeFromDropdownIndex(LegionGamepadKeyComboBox.SelectedIndex);
+            var keyCode = GetKeyCodeFromComboBox(LegionGamepadKeyComboBox);
             if (!mapping.KeyboardKeys.Contains(keyCode))
             {
                 mapping.KeyboardKeys.Add(keyCode);

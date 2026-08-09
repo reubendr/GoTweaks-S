@@ -38,6 +38,7 @@ using XboxGamingBar.Event;
 using XboxGamingBar.IPC;
 using XboxGamingBar.QuickSettings;
 using Shared.Enums;
+using Shared.Input;
 
 // The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -2993,6 +2994,8 @@ namespace XboxGamingBar
         /// </summary>
         private void PopulateRemapTargetComboBoxes()
         {
+            PopulateAllKeyboardKeyComboBoxes();
+
             var gamepad = new ComboBox[]
             {
                 LegionButtonY1ComboBox, LegionButtonY2ComboBox, LegionButtonY3ComboBox,
@@ -3019,11 +3022,49 @@ namespace XboxGamingBar
                 ScrollKeyComboBox, ScrollClickKeyComboBox,
                 CustomShortcutKeyComboBox,
                 HotkeyMenuAKeyComboBox, HotkeyMenuBKeyComboBox,
+                HotkeyMenuXKeyComboBox, HotkeyMenuYKeyComboBox,
+                HotkeyMenuDpadUpKeyComboBox, HotkeyMenuDpadDownKeyComboBox,
+                HotkeyMenuDpadLeftKeyComboBox, HotkeyMenuDpadRightKeyComboBox,
             };
             foreach (var c in gamepad) TryConvertToPickerFlyout(c, 4);
             foreach (var c in mouse) TryConvertToPickerFlyout(c, 3);
             foreach (var c in keys) TryConvertToPickerFlyout(c, 5, useGlyphs: false);
             WireConsolidatedRemapEditor();
+        }
+
+        private static readonly string[] KeyboardKeyComboNames =
+        {
+            "CustomShortcutKeyComboBox",
+            "HotkeyMenuAKeyComboBox", "HotkeyMenuBKeyComboBox",
+            "HotkeyMenuXKeyComboBox", "HotkeyMenuYKeyComboBox",
+            "HotkeyMenuDpadUpKeyComboBox", "HotkeyMenuDpadDownKeyComboBox",
+            "HotkeyMenuDpadLeftKeyComboBox", "HotkeyMenuDpadRightKeyComboBox",
+            "LegionButtonY1KeyComboBox", "LegionButtonY2KeyComboBox", "LegionButtonY3KeyComboBox",
+            "LegionButtonM1KeyComboBox", "LegionButtonM2KeyComboBox", "LegionButtonM3KeyComboBox",
+            "LegionButtonDesktopKeyComboBox", "LegionButtonPageKeyComboBox",
+            "LegionGamepadKeyComboBox",
+            "LegionLKeyComboBox", "LegionRKeyComboBox",
+            "LegionLLongKeyComboBox", "LegionRLongKeyComboBox",
+            "ScrollKeyComboBox", "ScrollClickKeyComboBox",
+        };
+
+        private void PopulateAllKeyboardKeyComboBoxes()
+        {
+            foreach (var name in KeyboardKeyComboNames)
+            {
+                if (FindName(name) is ComboBox combo)
+                    PopulateKeyboardComboBoxItems(combo);
+            }
+        }
+
+        private static void PopulateKeyboardComboBoxItems(ComboBox combo)
+        {
+            if (combo == null) return;
+            int savedIndex = combo.SelectedIndex;
+            combo.Items.Clear();
+            foreach (var label in HidKeyboardCatalog.ComboLabels)
+                combo.Items.Add(label);
+            combo.SelectedIndex = savedIndex >= 0 && savedIndex < combo.Items.Count ? savedIndex : 0;
         }
 
         private static readonly string[] ConsolidatedLegionButtons =
@@ -3246,25 +3287,7 @@ namespace XboxGamingBar
         private string DescribeKeyboardKeys(System.Collections.Generic.List<int> keys)
         {
             if (keys == null || keys.Count == 0) return null;
-            var reference = LegionButtonY1KeyComboBox;
-            var parts = new System.Collections.Generic.List<string>();
-            foreach (var code in keys)
-            {
-                string label = null;
-                if (reference != null)
-                {
-                    for (int i = 1; i < reference.Items.Count; i++)
-                    {
-                        if (GetKeyCodeFromDropdownIndex(i) == code)
-                        {
-                            label = reference.Items[i] as string;
-                            break;
-                        }
-                    }
-                }
-                parts.Add(label ?? $"0x{code:X2}");
-            }
-            return string.Join("+", parts);
+            return string.Join("+", keys.Select(k => HidKeyboardCatalog.GetDisplayName(k)));
         }
 
         /// <summary>
@@ -3512,84 +3535,191 @@ namespace XboxGamingBar
             };
         }
 
-        private static readonly string[][] KeyboardLayoutRows =
+        private bool keyboardCaptureActive;
+        private Action<int> keyboardCaptureCallback;
+        private Action keyboardCaptureCancel;
+        private Flyout activeKeyboardFlyout;
+
+        private void StopKeyboardCapture()
         {
-            new[] { "Esc", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" },
-            new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Backspace" },
-            new[] { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" },
-            new[] { "A", "S", "D", "F", "G", "H", "J", "K", "L", "Enter" },
-            new[] { "Z", "X", "C", "V", "B", "N", "M", "Up" },
-            new[] { "LCtrl", "LWin", "LAlt", "Space", "RAlt", "RWin", "RCtrl", "Left", "Down", "Right" },
-            new[] { "Tab", "LShift", "RShift" },
-        };
+            if (keyboardCaptureActive)
+            {
+                Window.Current.CoreWindow.KeyDown -= OnKeyboardCaptureKeyDown;
+                keyboardCaptureActive = false;
+            }
+            keyboardCaptureCallback = null;
+            keyboardCaptureCancel?.Invoke();
+            keyboardCaptureCancel = null;
+        }
+
+        private void StartKeyboardCapture(Action<int> onCaptured, Action onCancel = null)
+        {
+            StopKeyboardCapture();
+            keyboardCaptureCallback = onCaptured;
+            keyboardCaptureCancel = onCancel;
+            Window.Current.CoreWindow.KeyDown += OnKeyboardCaptureKeyDown;
+            keyboardCaptureActive = true;
+        }
+
+        private void OnKeyboardCaptureKeyDown(CoreWindow sender, KeyEventArgs args)
+        {
+            if (keyboardCaptureCallback == null) return;
+            if (args.VirtualKey == VirtualKey.Escape)
+            {
+                args.Handled = true;
+                StopKeyboardCapture();
+                return;
+            }
+            if (!HidKeyboardCatalog.TryGetCodeFromVirtualKey(args.VirtualKey, out int code) || code <= 0)
+                return;
+            args.Handled = true;
+            var cb = keyboardCaptureCallback;
+            StopKeyboardCapture();
+            cb?.Invoke(code);
+        }
+
+        private static int FindLabelIndex(System.Collections.Generic.List<string> labels, int hidCode)
+        {
+            string target = HidKeyboardCatalog.GetDisplayName(hidCode);
+            return labels.IndexOf(target);
+        }
 
         private void ShowKeyboardPickerFlyout(ComboBox combo, System.Collections.Generic.List<string> labels, FrameworkElement anchor)
         {
+            StopKeyboardCapture();
             var flyout = new Flyout();
-            var root = new StackPanel();
-            var placed = new System.Collections.Generic.HashSet<string>();
+            activeKeyboardFlyout = flyout;
+            flyout.Closed += (s, e) =>
+            {
+                StopKeyboardCapture();
+                if (activeKeyboardFlyout == flyout) activeKeyboardFlyout = null;
+            };
 
-            // Multi-select with OK/Cancel (field request): building a multi-key macro used
-            // to take one flyout round-trip PER KEY because a click committed and closed
-            // immediately. Now clicks toggle keys (in press order, shown highlighted) and
-            // OK commits them all - each SelectedIndex assignment fires the combo's
-            // SelectionChanged, which for chip-style macro combos appends the key and
-            // resets to the "+ Key" placeholder, so assigning sequentially builds the
-            // whole macro. For single-value combos the last toggled key wins.
+            var root = new StackPanel();
+            var keyboardHost = new StackPanel();
             var selectedOrder = new System.Collections.Generic.List<int>();
+            var keyButtons = new System.Collections.Generic.Dictionary<int, Button>();
             var normalBg = Windows.UI.Color.FromArgb(255, 0x2A, 0x2D, 0x32);
             var selectedBg = Windows.UI.Color.FromArgb(255, 0x2A, 0x4A, 0x66);
+            var captureHint = new TextBlock
+            {
+                Text = "Click keys to toggle, or press a key on your keyboard.",
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x99, 0x99, 0x99)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6),
+            };
+            root.Children.Add(captureHint);
+
+            var searchBox = new TextBox
+            {
+                PlaceholderText = "Search keys (e.g. F5, Num 7, ;)",
+                Margin = new Thickness(0, 0, 0, 6),
+            };
+            root.Children.Add(searchBox);
+
+            void ToggleKey(int idx, Button button)
+            {
+                if (idx <= 0) return;
+                if (selectedOrder.Contains(idx))
+                {
+                    selectedOrder.Remove(idx);
+                    button.Background = new SolidColorBrush(normalBg);
+                }
+                else
+                {
+                    selectedOrder.Add(idx);
+                    button.Background = new SolidColorBrush(selectedBg);
+                }
+            }
 
             Button MakeKey(string label, int idx)
             {
                 var b = new Button
                 {
                     Content = new TextBlock { Text = label, FontSize = 10, TextAlignment = TextAlignment.Center },
-                    MinWidth = label.Length > 3 ? 44 : 30,
+                    MinWidth = label.Length > 4 ? 48 : (label.Length > 2 ? 36 : 28),
                     Padding = new Thickness(2, 5, 2, 5),
                     Margin = new Thickness(1),
                     HorizontalContentAlignment = HorizontalAlignment.Center,
-                    Background = new SolidColorBrush(idx == combo.SelectedIndex ? selectedBg : normalBg),
+                    Background = new SolidColorBrush(selectedOrder.Contains(idx) ? selectedBg : normalBg),
+                    Tag = label,
                 };
-                b.Click += (s, e) =>
-                {
-                    // The "+ Key" placeholder is a no-op slot, not a key.
-                    if (label == "+ Key") return;
-                    if (selectedOrder.Contains(idx))
-                    {
-                        selectedOrder.Remove(idx);
-                        b.Background = new SolidColorBrush(normalBg);
-                    }
-                    else
-                    {
-                        selectedOrder.Add(idx);
-                        b.Background = new SolidColorBrush(selectedBg);
-                    }
-                };
+                b.Click += (s, e) => ToggleKey(idx, b);
+                keyButtons[idx] = b;
                 return b;
             }
 
-            foreach (var rowKeys in KeyboardLayoutRows)
+            void RebuildKeyboard(string filter)
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal };
-                foreach (var key in rowKeys)
+                keyboardHost.Children.Clear();
+                keyButtons.Clear();
+                filter = filter?.Trim() ?? string.Empty;
+                var placed = new System.Collections.Generic.HashSet<string>();
+
+                bool Matches(string label)
                 {
-                    int idx = labels.IndexOf(key);
-                    if (idx < 0) continue;
-                    placed.Add(key);
-                    row.Children.Add(MakeKey(key, idx));
+                    if (label == HidKeyboardCatalog.PlaceholderLabel) return false;
+                    return string.IsNullOrEmpty(filter)
+                        || label.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
                 }
-                if (row.Children.Count > 0) root.Children.Add(row);
+
+                foreach (var rowKeys in HidKeyboardCatalog.KeyboardLayoutRows)
+                {
+                    var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+                    foreach (var key in rowKeys)
+                    {
+                        if (!Matches(key)) continue;
+                        int idx = labels.IndexOf(key);
+                        if (idx < 0) continue;
+                        placed.Add(key);
+                        row.Children.Add(MakeKey(key, idx));
+                    }
+                    if (row.Children.Count > 0) keyboardHost.Children.Add(row);
+                }
+
+                var extras = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+                for (int i = 0; i < labels.Count; i++)
+                {
+                    if (placed.Contains(labels[i]) || !Matches(labels[i])) continue;
+                    extras.Children.Add(MakeKey(labels[i], i));
+                }
+                if (extras.Children.Count > 0) keyboardHost.Children.Add(extras);
             }
 
-            // anything not on the QWERTY map (e.g. the "+ Key" placeholder) goes on top
-            var extras = new StackPanel { Orientation = Orientation.Horizontal };
-            for (int i = 0; i < labels.Count; i++)
+            searchBox.TextChanged += (s, e) => RebuildKeyboard(searchBox.Text);
+            RebuildKeyboard(string.Empty);
+
+            var pressKeyButton = new Button
             {
-                if (placed.Contains(labels[i])) continue;
-                extras.Children.Add(MakeKey(labels[i], i));
-            }
-            if (extras.Children.Count > 0) root.Children.Insert(0, extras);
+                Content = "Press key on keyboard…",
+                MinWidth = 140,
+                Margin = new Thickness(0, 4, 0, 4),
+            };
+            pressKeyButton.Click += (s, e) =>
+            {
+                captureHint.Text = "Listening… press any key (Esc cancels).";
+                pressKeyButton.IsEnabled = false;
+                void ResetCaptureUi()
+                {
+                    pressKeyButton.IsEnabled = true;
+                    captureHint.Text = "Click keys to toggle, or press a key on your keyboard.";
+                }
+                StartKeyboardCapture(code =>
+                {
+                    ResetCaptureUi();
+                    int idx = FindLabelIndex(labels, code);
+                    if (idx <= 0) return;
+                    if (!selectedOrder.Contains(idx))
+                        selectedOrder.Add(idx);
+                    if (keyButtons.TryGetValue(idx, out var btn))
+                        btn.Background = new SolidColorBrush(selectedBg);
+                    else
+                        RebuildKeyboard(searchBox.Text);
+                }, ResetCaptureUi);
+            };
+            root.Children.Add(pressKeyButton);
+            root.Children.Add(keyboardHost);
 
             var okButton = new Button
             {
@@ -3604,9 +3734,7 @@ namespace XboxGamingBar
                 {
                     PreserveLegionScroll();
                     foreach (int idx in selectedOrder)
-                    {
                         combo.SelectedIndex = idx;
-                    }
                 }
                 catch (Exception ex) { Logger.Warn($"Keyboard picker OK failed: {ex.Message}"); }
                 flyout.Hide();
@@ -3624,8 +3752,12 @@ namespace XboxGamingBar
             confirmRow.Children.Add(cancelButton);
             root.Children.Add(confirmRow);
 
-            flyout.Content = new ScrollViewer { Content = root, MaxHeight = 460,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
+            flyout.Content = new ScrollViewer
+            {
+                Content = root,
+                MaxHeight = 520,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            };
             flyout.ShowAt(anchor);
         }
 

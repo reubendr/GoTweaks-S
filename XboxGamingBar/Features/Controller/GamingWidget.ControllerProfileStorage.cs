@@ -911,8 +911,7 @@ namespace XboxGamingBar
             var keyCombo = FindName($"LegionButton{buttonName}KeyComboBox") as ComboBox;
             if (keyCombo == null || keyCombo.SelectedIndex <= 0) return;  // 0 is "+ Key"
 
-            // Get the key code from the dropdown index
-            int keyCode = GetKeyCodeFromDropdownIndex(keyCombo.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(keyCombo);
             if (keyCode == 0) return;
 
             // Get current keys and add the new one (max 5)
@@ -940,58 +939,20 @@ namespace XboxGamingBar
             keyCombo.SelectedIndex = 0;
         }
 
+        private int GetKeyCodeFromComboBox(ComboBox combo)
+        {
+            if (combo == null || combo.SelectedIndex <= 0 || combo.SelectedIndex >= combo.Items.Count)
+                return 0;
+            return Shared.Input.HidKeyboardCatalog.GetCodeFromComboItem(combo.Items[combo.SelectedIndex]);
+        }
+
         private int GetKeyCodeFromDropdownIndex(int index)
         {
-            // Map dropdown index to HID key code
-            // Index 0 is "+ Key" placeholder
-            // Index 1-26 are A-Z (0x04-0x1D)
-            // Index 27-36 are 1-0 (0x1E-0x27)
-            // Index 37-48 are F1-F12 (0x3A-0x45)
-            // Index 49-53 are Enter, Esc, Space, Tab, Backspace (0x28-0x2C)
-            // Index 54-57 are Up, Down, Left, Right (0x52, 0x51, 0x50, 0x4F)
-            // Index 58-65 are modifier keys (0xE0-0xE7)
-            // Index 66-76 are navigation/media keys
-            // Index 77-78 are bracket keys
-
+            // Legacy index path — prefer GetKeyCodeFromComboBox. Uses reference combo if populated.
             if (index <= 0) return 0;
-            if (index <= 26) return 0x04 + (index - 1);   // A-Z: indices 1-26 → 0x04-0x1D
-            if (index <= 36) return 0x1E + (index - 27);  // 1-0: indices 27-36 → 0x1E-0x27
-            if (index <= 48) return 0x3A + (index - 37);  // F1-F12: indices 37-48 → 0x3A-0x45
-            if (index == 49) return 0x28;  // Enter
-            if (index == 50) return 0x29;  // Esc
-            if (index == 51) return 0x2C;  // Space
-            if (index == 52) return 0x2B;  // Tab
-            if (index == 53) return 0x2A;  // Backspace
-            if (index == 54) return 0x52;  // Up
-            if (index == 55) return 0x51;  // Down
-            if (index == 56) return 0x50;  // Left
-            if (index == 57) return 0x4F;  // Right
-            // Modifier keys
-            if (index == 58) return 0xE0;  // LCtrl
-            if (index == 59) return 0xE1;  // LShift
-            if (index == 60) return 0xE2;  // LAlt
-            if (index == 61) return 0xE3;  // LWin (HID Left GUI)
-            if (index == 62) return 0xE4;  // RCtrl
-            if (index == 63) return 0xE5;  // RShift
-            if (index == 64) return 0xE6;  // RAlt
-            if (index == 65) return 0xE7;  // RWin (HID Right GUI)
-            // Navigation keys
-            if (index == 66) return 0x4A;  // Home
-            if (index == 67) return 0x4D;  // End
-            if (index == 68) return 0x4B;  // PgUp
-            if (index == 69) return 0x4E;  // PgDn
-            if (index == 70) return 0x49;  // Insert
-            if (index == 71) return 0x4C;  // Delete
-            if (index == 72) return 0x46;  // PrintScr
-            if (index == 73) return 0x48;  // Pause
-            // Media keys (HID Keyboard page)
-            if (index == 74) return 0x80;  // VolUp
-            if (index == 75) return 0x81;  // VolDown
-            if (index == 76) return 0x7F;  // VolMute
-            // Bracket keys
-            if (index == 77) return 0x2F;  // [ LeftBracket
-            if (index == 78) return 0x30;  // ] RightBracket
-
+            var reference = LegionButtonY1KeyComboBox;
+            if (reference != null && index < reference.Items.Count)
+                return Shared.Input.HidKeyboardCatalog.GetCodeFromComboItem(reference.Items[index]);
             return 0;
         }
 
@@ -1167,36 +1128,8 @@ namespace XboxGamingBar
             FillWrapRows(keyTags, tagElements, GetKeyTagsWrapWidth(keyTags));
         }
 
-        private string GetKeyDisplayName(int keyCode)
-        {
-            // Map key codes to display names
-            var keyNames = new Dictionary<int, string>
-            {
-                { 0x04, "A" }, { 0x05, "B" }, { 0x06, "C" }, { 0x07, "D" }, { 0x08, "E" },
-                { 0x09, "F" }, { 0x0A, "G" }, { 0x0B, "H" }, { 0x0C, "I" }, { 0x0D, "J" },
-                { 0x0E, "K" }, { 0x0F, "L" }, { 0x10, "M" }, { 0x11, "N" }, { 0x12, "O" },
-                { 0x13, "P" }, { 0x14, "Q" }, { 0x15, "R" }, { 0x16, "S" }, { 0x17, "T" },
-                { 0x18, "U" }, { 0x19, "V" }, { 0x1A, "W" }, { 0x1B, "X" }, { 0x1C, "Y" },
-                { 0x1D, "Z" }, { 0x1E, "1" }, { 0x1F, "2" }, { 0x20, "3" }, { 0x21, "4" },
-                { 0x22, "5" }, { 0x23, "6" }, { 0x24, "7" }, { 0x25, "8" }, { 0x26, "9" },
-                { 0x27, "0" }, { 0x28, "Enter" }, { 0x29, "Esc" }, { 0x2A, "Backspace" },
-                { 0x2B, "Tab" }, { 0x2C, "Space" }, { 0x2D, "-" }, { 0x2E, "=" },
-                { 0x2F, "[" }, { 0x30, "]" }, { 0x31, "\\" }, { 0x33, ";" }, { 0x34, "'" },
-                { 0x35, "`" }, { 0x36, "," }, { 0x37, "." }, { 0x38, "/" }, { 0x39, "CapsLock" },
-                { 0x3A, "F1" }, { 0x3B, "F2" }, { 0x3C, "F3" }, { 0x3D, "F4" }, { 0x3E, "F5" },
-                { 0x3F, "F6" }, { 0x40, "F7" }, { 0x41, "F8" }, { 0x42, "F9" }, { 0x43, "F10" },
-                { 0x44, "F11" }, { 0x45, "F12" }, { 0x46, "PrtSc" }, { 0x47, "ScrLk" },
-                { 0x48, "Pause" }, { 0x49, "Ins" }, { 0x4A, "Home" }, { 0x4B, "PgUp" },
-                { 0x4C, "Del" }, { 0x4D, "End" }, { 0x4E, "PgDn" }, { 0x4F, "Right" },
-                { 0x50, "Left" }, { 0x51, "Down" }, { 0x52, "Up" },
-                // Modifier keys
-                { 0xE0, "LCtrl" }, { 0xE1, "LShift" }, { 0xE2, "LAlt" }, { 0xE3, "LWin" },
-                { 0xE4, "RCtrl" }, { 0xE5, "RShift" }, { 0xE6, "RAlt" }, { 0xE7, "RWin" },
-                // Media keys
-                { 0x7F, "VolMute" }, { 0x80, "VolUp" }, { 0x81, "VolDown" }
-            };
-            return keyNames.TryGetValue(keyCode, out var name) ? name : $"0x{keyCode:X2}";
-        }
+        private string GetKeyDisplayName(int keyCode) =>
+            Shared.Input.HidKeyboardCatalog.GetDisplayName(keyCode);
 
         private ButtonMapping GetButtonMappingFromUI(string buttonName)
         {

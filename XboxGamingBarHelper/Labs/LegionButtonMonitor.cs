@@ -24,6 +24,10 @@ namespace XboxGamingBarHelper.Labs
         ToggleDesktopControls = 4,
         TouchKeyboard = 5,
         ToggleControllerEmulation = 6,
+        /// <summary>Steam Big Picture main menu (left) — Ctrl+1.</summary>
+        SteamMainMenu = 7,
+        /// <summary>Steam Big Picture quick access menu (right) — Ctrl+2.</summary>
+        SteamQuickAccess = 8,
     }
 
     /// <summary>
@@ -4632,6 +4636,24 @@ namespace XboxGamingBarHelper.Labs
                         Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Toggle Controller Emulation");
                         try { OnToggleControllerEmulationRequested?.Invoke(); }
                         catch (Exception ex) { Logger.Error($"Toggle Controller Emulation failed: {ex.Message}"); }
+                        break;
+
+                    case LegionButtonAction.SteamMainMenu:
+                        try
+                        {
+                            onShortcutTriggered?.Invoke("Ctrl+1");
+                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Steam Main Menu (Ctrl+1)");
+                        }
+                        catch (Exception ex) { Logger.Error($"Steam Main Menu shortcut failed: {ex.Message}"); }
+                        break;
+
+                    case LegionButtonAction.SteamQuickAccess:
+                        try
+                        {
+                            onShortcutTriggered?.Invoke("Ctrl+2");
+                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Steam Quick Access (Ctrl+2)");
+                        }
+                        catch (Exception ex) { Logger.Error($"Steam Quick Access shortcut failed: {ex.Message}"); }
                         break;
                 }
             }

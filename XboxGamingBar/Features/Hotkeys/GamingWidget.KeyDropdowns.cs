@@ -143,87 +143,63 @@ namespace XboxGamingBar
             UpdateKeyTagsDisplay(keyName, keyTags);
         }
 
-        private int GetKeyCodeFromDisplayName(string name)
-        {
-            var keyNames = new Dictionary<string, int>
-            {
-                { "A", 0x04 }, { "B", 0x05 }, { "C", 0x06 }, { "D", 0x07 }, { "E", 0x08 },
-                { "F", 0x09 }, { "G", 0x0A }, { "H", 0x0B }, { "I", 0x0C }, { "J", 0x0D },
-                { "K", 0x0E }, { "L", 0x0F }, { "M", 0x10 }, { "N", 0x11 }, { "O", 0x12 },
-                { "P", 0x13 }, { "Q", 0x14 }, { "R", 0x15 }, { "S", 0x16 }, { "T", 0x17 },
-                { "U", 0x18 }, { "V", 0x19 }, { "W", 0x1A }, { "X", 0x1B }, { "Y", 0x1C },
-                { "Z", 0x1D }, { "1", 0x1E }, { "2", 0x1F }, { "3", 0x20 }, { "4", 0x21 },
-                { "5", 0x22 }, { "6", 0x23 }, { "7", 0x24 }, { "8", 0x25 }, { "9", 0x26 },
-                { "0", 0x27 }, { "Enter", 0x28 }, { "Esc", 0x29 }, { "Backspace", 0x2A },
-                { "Tab", 0x2B }, { "Space", 0x2C },
-                { "F1", 0x3A }, { "F2", 0x3B }, { "F3", 0x3C }, { "F4", 0x3D }, { "F5", 0x3E },
-                { "F6", 0x3F }, { "F7", 0x40 }, { "F8", 0x41 }, { "F9", 0x42 }, { "F10", 0x43 },
-                { "F11", 0x44 }, { "F12", 0x45 },
-                { "Right", 0x4F }, { "Left", 0x50 }, { "Down", 0x51 }, { "Up", 0x52 },
-                { "Home", 0x4A }, { "PgUp", 0x4B }, { "Delete", 0x4C }, { "Del", 0x4C }, { "End", 0x4D },
-                { "PgDn", 0x4E }, { "Insert", 0x49 }, { "Ins", 0x49 }, { "PrintScr", 0x46 }, { "PrtSc", 0x46 }, { "Pause", 0x48 },
-                { "LCtrl", 0xE0 }, { "LShift", 0xE1 }, { "LAlt", 0xE2 }, { "LWin", 0xE3 }, { "LMeta", 0xE3 },
-                { "RCtrl", 0xE4 }, { "RShift", 0xE5 }, { "RAlt", 0xE6 }, { "RWin", 0xE7 }, { "RMeta", 0xE7 },
-                { "VolMute", 0x7F }, { "VolUp", 0x80 }, { "VolDown", 0x81 },
-                { "[", 0x2F }, { "]", 0x30 }
-            };
-            return keyNames.TryGetValue(name, out int code) ? code : 0;
-        }
+        private int GetKeyCodeFromDisplayName(string name) =>
+            Shared.Input.HidKeyboardCatalog.GetCodeFromDisplayName(name);
 
         // Hotkey key selection handlers
         private void HotkeyMenuAKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuAKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuAKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuAKeyComboBox);
             AddKeyToSelection("HotkeyMenuA", keyCode, HotkeyMenuAKeyTags, HotkeyMenuAKeyComboBox, () => SaveHotkeyKeys("MenuA", "HotkeyMenuA"));
         }
 
         private void HotkeyMenuBKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuBKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuBKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuBKeyComboBox);
             AddKeyToSelection("HotkeyMenuB", keyCode, HotkeyMenuBKeyTags, HotkeyMenuBKeyComboBox, () => SaveHotkeyKeys("MenuB", "HotkeyMenuB"));
         }
 
         private void HotkeyMenuXKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuXKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuXKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuXKeyComboBox);
             AddKeyToSelection("HotkeyMenuX", keyCode, HotkeyMenuXKeyTags, HotkeyMenuXKeyComboBox, () => SaveHotkeyKeys("MenuX", "HotkeyMenuX"));
         }
 
         private void HotkeyMenuYKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuYKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuYKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuYKeyComboBox);
             AddKeyToSelection("HotkeyMenuY", keyCode, HotkeyMenuYKeyTags, HotkeyMenuYKeyComboBox, () => SaveHotkeyKeys("MenuY", "HotkeyMenuY"));
         }
 
         private void HotkeyMenuDpadUpKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuDpadUpKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuDpadUpKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuDpadUpKeyComboBox);
             AddKeyToSelection("HotkeyMenuDpadUp", keyCode, HotkeyMenuDpadUpKeyTags, HotkeyMenuDpadUpKeyComboBox, () => SaveHotkeyKeys("MenuDpadUp", "HotkeyMenuDpadUp"));
         }
 
         private void HotkeyMenuDpadDownKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuDpadDownKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuDpadDownKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuDpadDownKeyComboBox);
             AddKeyToSelection("HotkeyMenuDpadDown", keyCode, HotkeyMenuDpadDownKeyTags, HotkeyMenuDpadDownKeyComboBox, () => SaveHotkeyKeys("MenuDpadDown", "HotkeyMenuDpadDown"));
         }
 
         private void HotkeyMenuDpadLeftKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuDpadLeftKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuDpadLeftKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuDpadLeftKeyComboBox);
             AddKeyToSelection("HotkeyMenuDpadLeft", keyCode, HotkeyMenuDpadLeftKeyTags, HotkeyMenuDpadLeftKeyComboBox, () => SaveHotkeyKeys("MenuDpadLeft", "HotkeyMenuDpadLeft"));
         }
 
         private void HotkeyMenuDpadRightKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (isLoadingHotkeys || HotkeyMenuDpadRightKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(HotkeyMenuDpadRightKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(HotkeyMenuDpadRightKeyComboBox);
             AddKeyToSelection("HotkeyMenuDpadRight", keyCode, HotkeyMenuDpadRightKeyTags, HotkeyMenuDpadRightKeyComboBox, () => SaveHotkeyKeys("MenuDpadRight", "HotkeyMenuDpadRight"));
         }
 
@@ -241,14 +217,14 @@ namespace XboxGamingBar
         private void LegionLKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LegionLKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(LegionLKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(LegionLKeyComboBox);
             AddKeyToSelection("LegionL", keyCode, LegionLKeyTags, LegionLKeyComboBox, SaveLegionLKeys);
         }
 
         private void LegionRKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LegionRKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(LegionRKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(LegionRKeyComboBox);
             AddKeyToSelection("LegionR", keyCode, LegionRKeyTags, LegionRKeyComboBox, SaveLegionRKeys);
         }
 
@@ -273,7 +249,7 @@ namespace XboxGamingBar
         {
             var combo = FindName("LegionLLongKeyComboBox") as ComboBox;
             if (combo?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(combo.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(combo);
             AddKeyToSelection("LegionLLong", keyCode, FindName("LegionLLongKeyTags") as ItemsControl, combo, SaveLegionLLongKeys);
         }
 
@@ -281,7 +257,7 @@ namespace XboxGamingBar
         {
             var combo = FindName("LegionRLongKeyComboBox") as ComboBox;
             if (combo?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(combo.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(combo);
             AddKeyToSelection("LegionRLong", keyCode, FindName("LegionRLongKeyTags") as ItemsControl, combo, SaveLegionRLongKeys);
         }
 
@@ -303,14 +279,14 @@ namespace XboxGamingBar
         private void ScrollKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (ScrollKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(ScrollKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(ScrollKeyComboBox);
             AddKeyToSelection("Scroll", keyCode, ScrollKeyTags, ScrollKeyComboBox, SaveScrollKeys);
         }
 
         private void ScrollClickKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (ScrollClickKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(ScrollClickKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(ScrollClickKeyComboBox);
             AddKeyToSelection("ScrollClick", keyCode, ScrollClickKeyTags, ScrollClickKeyComboBox, SaveScrollClickKeys);
         }
 
@@ -334,7 +310,7 @@ namespace XboxGamingBar
         private void CustomShortcutKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (CustomShortcutKeyComboBox?.SelectedIndex <= 0) return;
-            int keyCode = GetKeyCodeFromDropdownIndex(CustomShortcutKeyComboBox.SelectedIndex);
+            int keyCode = GetKeyCodeFromComboBox(CustomShortcutKeyComboBox);
             if (_customShortcutKeys.Count < 5 && !_customShortcutKeys.Contains(keyCode) && keyCode > 0)
             {
                 _customShortcutKeys.Add(keyCode);

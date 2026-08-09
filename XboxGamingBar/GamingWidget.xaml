@@ -8507,6 +8507,8 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
+                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
+                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -8561,6 +8563,8 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
+                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
+                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionLLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8615,6 +8619,8 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
+                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
+                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -8669,6 +8675,8 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
+                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
+                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionRLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8700,7 +8708,7 @@
                                                 Click="LegionRLongCommandApplyButton_Click"/>
                                     </Grid>
 
-                                    <TextBlock Text="Note: holding Legion L/R for 5 seconds restarts the controller (firmware behavior - release well before that). The hold action here fires at ~0.8s."
+                                    <TextBlock Text="Note: Click = tap. Hold = separate action after ~0.8s (configure the Hold row below each button). Holding 5s restarts the controller (firmware — release well before that)."
                                                FontSize="11" Foreground="#909090" TextWrapping="Wrap" Margin="0,10,0,0"/>
 
                                     <!-- Status Text for Legion buttons -->
