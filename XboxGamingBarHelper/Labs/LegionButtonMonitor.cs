@@ -7,6 +7,8 @@ using Microsoft.Win32.SafeHandles;
 using NLog;
 using Windows.Storage;
 using XboxGamingBarHelper.ControllerEmulation;
+using XboxGamingBarHelper.Settings;
+
 
 namespace XboxGamingBarHelper.Labs
 {
@@ -292,6 +294,12 @@ namespace XboxGamingBarHelper.Labs
         // which GameInput-brokered consumers could see through). Volatile: set from the
         // emulation manager's thread, read by the monitor thread's per-connect init.
         private volatile bool _physicalXInputSuppressed = false;
+        // The XInput state requested by the rest of the app (e.g., LegionOsReportingDisabled).
+        // The actual firmware value may be forced ON if the user enables the "Steam Input + Legion
+        // L/R + back buttons" setting.
+        private volatile bool _requestedPhysicalXInputEnabled = true;
+        public bool RequestedPhysicalXInputEnabled => _requestedPhysicalXInputEnabled;
+
         private readonly object _hidLock = new object();  // Lock for HID operations to prevent race conditions
         private readonly object startStopLock = new object();  // #94: serialize Start/StartForBatteryMonitoring (see Start)
         private Thread monitorThread;
@@ -2267,10 +2275,13 @@ namespace XboxGamingBarHelper.Labs
                 }
 
                 // ONCE per connection, and LAST so it is the final word: write the XInput+vendor
-                // coexistence registers (04/0f=01 XInput on, 04/11=02 init report format, 04/10=01
-                // gyro reporting). These are latched and persist across the recurring handshake, so
-                // one write per connect keeps the physical pad's XInput endpoint alive while the
-                // button monitor reads the vendor stream. Reverse-engineered + confirmed 2026-07-22.
+                // coexistence registers (04/0f=0x01 XInput on / 0x02 vendor-exclusive depending on
+                // the "Steam Input + Legion L/R + back buttons" setting, 04/11=02 init report format,
+                // 04/10=01 gyro reporting). These are latched and persist across the recurring handshake,
+                // so one write per connect keeps the physical pad's XInput endpoint alive when the user
+                // wants Steam Input to see the standard pad while GoTweaks reads the vendor stream.
+                // Reverse-engineered + confirmed 2026-07-22.
+
                 if (!_reportStreamWoken)
                 {
                     ReplayLegionSpaceInit(handle);
@@ -2304,34 +2315,38 @@ namespace XboxGamingBarHelper.Labs
         // 0xFFA0 vendor interface (value 0x02 = on, 0x01 = off) that STICKS until re-set or
         // the controller re-enumerates:
         //   04 0f 00 [v] : XInput output.  0x02 = vendor-EXCLUSIVE (XInput dead - the bug!),
-        //                  0x01 = XInput ON alongside the vendor stream.  <-- the fix.
+        //                  0x01 = XInput ON alongside the vendor stream.  <-- hardcoded ON.
         //   04 11 00 [v] : report format.  0x02 = initialized 04:00:A1 (what we read for
         //                  battery/buttons/gyro), 0x01 = uninitialized 04:3c:74.
         //   04 10 [ctrl] [v] : gyro HID reporting per half. 0x01 = ON, 0x02 = OFF.
         // Post-firmware-update, GoTweaks' bare init (01 04 + 6A) left 04 0f at 0x02, so the pad
         // enumerated but fed no XInput ("shows in gamepad-tester, no inputs; killing GoTweaks or
         // launching Legion Space revived it"). Writing these three registers establishes the
-        // coexistence Legion Space uses. Full diagnosis + the 35-command Legion Space replay it
-        // replaced are in memory (controller-report-stream-wake).
+        // coexistence Legion Space uses. This fork hardcodes 04/0f=0x01 so Steam Input always
+        // keeps the standard Xbox pad while GoTweaks still monitors the vendor stream for special
+        // buttons. Full diagnosis + the 35-command Legion Space replay it replaced are in memory
+        // (controller-report-stream-wake).
+
         private static readonly byte[][] XInputCoexistenceRegisters =
         {
             new byte[] { 0x05, 0x00, 0x04, 0x11, 0x00, 0x02 },              // report format = initialized 04:00:A1
-            null, // placeholder: XInput output register (04/0f) - value depends on _physicalXInputSuppressed
+            null, // placeholder: XInput output register (04/0f). The actual value is decided at runtime
+                  // by the "Steam Input + Legion L/R + back buttons" setting (0x01 = ON) and the
+                  // last requested physical-XInput state.
+
+
             new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_LEFT_ID,  0x01 }, // gyro HID reporting ON, left
             new byte[] { 0x05, 0x00, 0x04, 0x10, LEGION_CONTROLLER_RIGHT_ID, 0x01 }, // gyro HID reporting ON, right
         };
 
         // 04/0f: 0x01 = XInput ON alongside vendor stream; 0x02 = vendor-exclusive
-        // (XInput suppressed - used while controller emulation runs on LegionHid).
-        // Written to THREE addresses: 0x00 (global/receiver) plus each half. The global
-        // write alone is honored while the halves are ATTACHED, but in DETACHED mode the
-        // halves are separate wireless endpoints behind the receiver and the global write
-        // does not reach them - field report 2026-07-22: suppress while attached, detach,
-        // then disable emulation while detached left the pad dead until a controller
-        // restart. Per-half addressing matches the rest of the 04-xx family (04/10 etc.).
-        private byte[][] BuildXInputOutputRegisterCommands()
+        // (XInput suppressed). When the "Steam Input + Legion L/R + back buttons" setting is
+        // enabled, the value is always 0x01 so the physical pad stays visible to Steam Input /
+        // standard XInput games while GoTweaks reads the vendor stream for special buttons
+        // (Legion L/R, M1-M3, Y1-Y3). Controller emulation hides the physical pad via HidHide
+        // rather than firmware suppression.
+        private byte[][] BuildXInputOutputRegisterCommands(byte value)
         {
-            byte value = _physicalXInputSuppressed ? (byte)0x02 : (byte)0x01;
             return new[]
             {
                 new byte[] { 0x05, 0x00, 0x04, 0x0F, 0x00, value },
@@ -2340,16 +2355,20 @@ namespace XboxGamingBarHelper.Labs
             };
         }
 
+
+
         /// <summary>
-        /// Enables or suppresses the physical pad's XInput output via firmware register
-        /// 04/0f (latched, survives the recurring handshake). Used by controller emulation
-        /// (LegionHid source) so games can't see the stock pad while a virtual pad runs -
-        /// unlike HidHide cloaking, GameInput-brokered consumers cannot see through this.
-        /// The desired state is remembered and re-asserted by the per-connect init, so it
-        /// survives receiver re-enumerations (dock/undock, PID flips) mid-emulation.
+        /// Re-asserts the physical pad's XInput output via firmware register
+        /// 04/0f (latched, survives the recurring handshake). If the user has enabled the
+        /// "Steam Input + Legion L/R + back buttons" setting, the physical XInput endpoint is
+        /// forced ON so Steam keeps the standard pad while GoTweaks still monitors the vendor
+        /// stream. When the setting is off, the enabled parameter (from LegionOsReportingDisabled)
+        /// decides whether the physical pad is suppressed. Controller emulation hides the physical
+        /// pad via HidHide instead of firmware suppression.
         /// Returns true if the register write was sent now (false = no handle yet; the
         /// state still applies on next connect).
         /// </summary>
+
         public bool SetPhysicalXInputEnabled(bool enabled)
         {
             // Go 2 command space only: the Go S uses a different [cmd][sub] protocol and its
@@ -2360,24 +2379,42 @@ namespace XboxGamingBarHelper.Labs
                 Logger.Info("LegionButtonMonitor: SetPhysicalXInputEnabled skipped (Go S command space)");
                 return false;
             }
-            _physicalXInputSuppressed = !enabled;
+
+            _requestedPhysicalXInputEnabled = enabled;
+
+            bool forceOn = SettingsManager.GetInstance()?.LegionSteamInputMode?.Value ?? false;
+            byte xinputValue;
+            if (forceOn)
+            {
+                Logger.Info("LegionButtonMonitor: 'Steam Input + Legion L/R + back buttons' is ON; forcing physical XInput ON.");
+                xinputValue = 0x01;
+            }
+            else
+            {
+                xinputValue = enabled ? (byte)0x01 : (byte)0x02;
+                if (!enabled)
+                {
+                    Logger.Warn("LegionButtonMonitor: Physical XInput suppression request honored (setting off); physical pad will be hidden from Steam/Windows.");
+                }
+            }
+            _physicalXInputSuppressed = (xinputValue == 0x02);
+
             var handle = hidHandle;
             if (handle == null || handle.IsInvalid || !_hasWriteAccess)
             {
-                Logger.Info($"LegionButtonMonitor: physical XInput {(enabled ? "enable" : "suppress")} deferred (no HID handle) - will apply on connect");
+                Logger.Info("LegionButtonMonitor: physical XInput enable deferred (no HID handle) - will apply on connect");
                 return false;
             }
             try
             {
                 bool ok = true;
-                foreach (byte[] cmd in BuildXInputOutputRegisterCommands())
+                foreach (byte[] cmd in BuildXInputOutputRegisterCommands(xinputValue))
                 {
-                    ok &= SendOutputReport(handle, cmd,
-                        enabled ? "physical XInput output ON" : "physical XInput output OFF (controller emulation)");
+                    ok &= SendOutputReport(handle, cmd, "physical XInput output");
                     System.Threading.Thread.Sleep(20);
                 }
                 ApplyFrontButtonFirmwareState(handle);
-                Logger.Info($"LegionButtonMonitor: physical XInput output {(enabled ? "ENABLED" : "SUPPRESSED")} via 04/0f (global+L+R) => {ok}");
+                Logger.Info($"LegionButtonMonitor: physical XInput output {(xinputValue == 0x01 ? "ENABLED" : "DISABLED")} via 04/0f (global+L+R) => {ok}");
                 return ok;
             }
             catch (Exception ex)
@@ -2389,6 +2426,8 @@ namespace XboxGamingBarHelper.Labs
                 return false;
             }
         }
+
+
 
         // Legion Desktop (0x25) / Page (0x26) firmware button mappings. In vendor-exclusive
         // mode (04/0f=0x02, i.e. OS reporting disabled / emulation) the firmware handles these
@@ -2463,13 +2502,17 @@ namespace XboxGamingBarHelper.Labs
             }
             try
             {
+                bool forceOn = SettingsManager.GetInstance()?.LegionSteamInputMode?.Value ?? false;
+                byte xinputValue = forceOn ? (byte)0x01 : (_requestedPhysicalXInputEnabled ? (byte)0x01 : (byte)0x02);
+                _physicalXInputSuppressed = (xinputValue == 0x02);
+
                 int ok = 0, total = 0;
                 foreach (byte[] entry in XInputCoexistenceRegisters)
                 {
-                    // The 04/0f slot honors the emulation manager's suppression request so a
-                    // mid-emulation reconnect doesn't resurrect the stock pad's XInput. It
-                    // expands to three writes (global + per half - see the builder).
-                    byte[][] cmds = entry != null ? new[] { entry } : BuildXInputOutputRegisterCommands();
+                    // The 04/0f slot is filled at runtime based on the "Steam Input + Legion L/R
+                    // + back buttons" setting and the last requested physical-XInput state. It expands
+                    // to three writes (global + per half - see the builder).
+                    byte[][] cmds = entry != null ? new[] { entry } : BuildXInputOutputRegisterCommands(xinputValue);
                     foreach (byte[] cmd in cmds)
                     {
                         total++;
@@ -2477,12 +2520,14 @@ namespace XboxGamingBarHelper.Labs
                         System.Threading.Thread.Sleep(20);
                     }
                 }
-                // Re-assert the front-button firmware state to match the current suppression
-                // (a reconnect while suppressed must re-clear Desktop/Page, else the stock
-                // Win+D / Win+Tab shortcuts come back).
+                // Re-assert the front-button firmware state to match the current XInput state
+                // (a reconnect must leave Desktop/Page mappings untouched, as they are still
+                // handled by the firmware / Steam Input when the pad is visible).
                 ApplyFrontButtonFirmwareState(handle);
-                Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{total}, xinput={(!_physicalXInputSuppressed ? "ON" : "SUPPRESSED (emu)")})");
+                Logger.Info($"LegionButtonMonitor: Wrote XInput coexistence registers ({ok}/{total}, xinput={(xinputValue == 0x01 ? "ON" : "OFF")})");
             }
+
+
             catch (Exception ex)
             {
                 Logger.Warn($"LegionButtonMonitor: XInput coexistence write failed: {ex.Message}");
