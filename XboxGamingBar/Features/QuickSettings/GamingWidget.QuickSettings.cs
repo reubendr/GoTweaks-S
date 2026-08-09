@@ -1,0 +1,1025 @@
+﻿using Microsoft.Gaming.XboxGameBar;
+using Microsoft.Gaming.XboxGameBar.Input;
+using Microsoft.UI.Xaml.Controls;
+using NLog;
+using Shared.Data;
+using Shared.Utilities;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Runtime.CompilerServices;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Windows.ApplicationModel;
+using Windows.Data.Json;
+using Windows.Foundation;
+using Windows.Foundation.Metadata;
+using Windows.UI.Core;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
+using Windows.UI.Xaml.Media.Imaging;
+using Windows.UI.Xaml.Navigation;
+using Windows.System.Power;
+using Windows.Storage;
+using Windows.System;
+using Windows.UI.Xaml.Input;
+using System.Runtime.InteropServices;
+using Windows.UI;
+using XboxGamingBar.Data;
+using XboxGamingBar.Event;
+using XboxGamingBar.IPC;
+using XboxGamingBar.QuickSettings;
+using Shared.Enums;
+
+namespace XboxGamingBar
+{
+    public sealed partial class GamingWidget
+    {
+        // Tile brushes
+        private SolidColorBrush tileOffBrush;
+        private SolidColorBrush tileOnBrush;
+        private SolidColorBrush tileActiveBrush;
+        private SolidColorBrush tileTriggerBrush;
+        private LinearGradientBrush tileDefaultProfileBrush;
+
+        // ---- Win11 theme tile brushes (fork port, commit 77a24806) ----
+        // Active-tile accent signal: the live Windows accent color shows up on the
+        // state text ("On") and the bottom accent bar; tile background/icon/name
+        // stay neutral in Win11 mode.
+        private SolidColorBrush tileAccentBrush;
+        private SolidColorBrush tileBarOffBrush;
+        // Action/trigger tiles (Keyboard, custom shortcuts) use their own distinct
+        // color for the subtitle + bottom bar in Win11 mode, never the accent.
+        private SolidColorBrush tileActionBrush;
+        // Fixed severity colors for multi-state tiles (Battery, TDP Mode, Power
+        // Mode, EPP) - never tied to the live accent so the meaning (green=light/
+        // safe, blue=balanced, red=heavy/hot, purple=custom) stays consistent.
+        // Yellow is ours (not in the fork): the fork pinned Battery to green, but we
+        // keep our min-of-device+controller-batteries severity semantics and only
+        // move the presentation from background tint to bar.
+        private SolidColorBrush tileSeverityGreenBrush;
+        private SolidColorBrush tileSeverityBlueBrush;
+        private SolidColorBrush tileSeverityRedBrush;
+        private SolidColorBrush tileSeverityPurpleBrush;
+        private SolidColorBrush tileSeverityYellowBrush;
+
+        private bool quickSettingsInitialized = false;
+
+        // Which style the tile/metrics UI was last BUILT for. The Win11 theme is a
+        // structural variant (accent bar vs background tint), so when the active
+        // theme's Win11-ness no longer matches this, ApplyTheme rebuilds the tiles
+        // and metrics grid. Set in RebuildQuickSettingsTiles.
+        private bool quickSettingsBuiltForWin11 = false;
+
+        // Tile definitions with visibility tracking
+        private class TileDefinition
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string Glyph { get; set; }
+            public bool IsVisible { get; set; } = true;
+            public bool IsTrigger { get; set; } = false;  // True for tiles that trigger actions (keyboard, custom shortcuts)
+            public bool IsAction { get; set; } = false;   // True for action tiles (Task Manager, Explorer, etc.) - shown at bottom
+            public string CustomShortcut { get; set; }    // For custom shortcut tiles
+            public int Order { get; set; } = 0;           // Display order (lower = first)
+            public string ControllerHotkey { get; set; }  // Decimal string of a ControllerComboButtons bitmask, or null/"" if unbound
+            public Button TileButton { get; set; }
+            public TextBlock StateText { get; set; }
+            public CheckBox VisibilityCheckBox { get; set; }
+            public FontIcon IconElement { get; set; }     // Win11 theme: tile icon (Segoe Fluent Icons)
+            public Border AccentBar { get; set; }         // Win11 theme: bottom accent bar (null in classic builds)
+
+            // For scrolling text animation (Profile tile)
+            public Canvas StateTextCanvas { get; set; }
+            public TranslateTransform StateTextTransform { get; set; }
+            public Storyboard ScrollStoryboard { get; set; }
+        }
+
+        // List of custom shortcut tiles
+        private List<TileDefinition> qsCustomShortcuts = new List<TileDefinition>();
+
+        private List<TileDefinition> qsTileDefinitions = new List<TileDefinition>();
+        private Dictionary<string, TileDefinition> qsTileMap = new Dictionary<string, TileDefinition>();
+
+        // Edit mode state for tile customization
+        private bool qsEditMode = false;
+        private TileDefinition qsSelectedTileForMove = null;
+
+        // Column count setting (3 or 4 columns)
+        private int qsColumnCount = 4;
+
+        // Quick Metrics row state
+        private bool quickMetricsEnabled = true;  // on by default; a saved choice (QS_MetricsEnabled) overrides
+        private bool isUpdatingMetricCheckboxes = false;
+        private bool screenSaverEnabled = false;
+        private const string ScreenSaverEnabledKey = "QS_ScreenSaverEnabled";
+        private const int ScreenSaverTimeoutSeconds = 60;
+        private DispatcherTimer screenSaverCountdownTimer;
+        private const string QuickMetricsEnabledKey = "QS_MetricsEnabled";
+        private const string PanelBrightnessShowKey = "QS_ShowBrightness";
+        private bool panelBrightnessShow = false;  // hidden by default; revealed via Customize
+        private const string QuickMetricsSelectionKey = "QS_MetricsSelection";
+        private const int MaxSelectedMetrics = 6;
+
+        // Available metric types with their display properties
+        private enum MetricType
+        {
+            BatteryDrain,
+            BatteryLevel,
+            CPUUsage,
+            CPUTemp,
+            CPUWattage,
+            GPUUsage,
+            GPUTemp,
+            GPUWattage,
+            MemoryUsage,
+            TimeRemaining
+        }
+
+        // Metric display info
+        private class MetricInfo
+        {
+            public string Id { get; set; }
+            public string Label { get; set; }
+            public string Glyph { get; set; }
+            public string Unit { get; set; }
+            public TextBlock ValueTextBlock { get; set; }
+            public TextBlock LabelTextBlock { get; set; }
+        }
+
+        // Map of metric type to display info
+        private readonly Dictionary<MetricType, MetricInfo> metricDefinitions = new Dictionary<MetricType, MetricInfo>
+        {
+            { MetricType.BatteryDrain, new MetricInfo { Id = "BatteryDrain", Label = "Battery", Glyph = "\uE83F", Unit = "W" } },
+            { MetricType.BatteryLevel, new MetricInfo { Id = "BatteryLevel", Label = "Battery", Glyph = "\uE83F", Unit = "%" } },
+            { MetricType.CPUUsage, new MetricInfo { Id = "CPUUsage", Label = "CPU", Glyph = "\uEEA1", Unit = "%" } },
+            { MetricType.CPUTemp, new MetricInfo { Id = "CPUTemp", Label = "CPU Temp", Glyph = "\uE9CA", Unit = "°" } },
+            { MetricType.CPUWattage, new MetricInfo { Id = "CPUWattage", Label = "CPU", Glyph = "\uEEA1", Unit = "W" } },
+            { MetricType.GPUUsage, new MetricInfo { Id = "GPUUsage", Label = "GPU", Glyph = "\uE964", Unit = "%" } },
+            { MetricType.GPUTemp, new MetricInfo { Id = "GPUTemp", Label = "GPU Temp", Glyph = "\uE9CA", Unit = "°" } },
+            { MetricType.GPUWattage, new MetricInfo { Id = "GPUWattage", Label = "GPU", Glyph = "\uE964", Unit = "W" } },
+            { MetricType.MemoryUsage, new MetricInfo { Id = "MemoryUsage", Label = "Memory", Glyph = "\uEEA0", Unit = "%" } },
+            { MetricType.TimeRemaining, new MetricInfo { Id = "TimeRemaining", Label = "Time", Glyph = "\uE916", Unit = "" } }
+        };
+
+        // Currently selected metrics (in order of display)
+        private List<MetricType> selectedMetrics = new List<MetricType>();
+
+        // Current metrics data from helper
+        private Dictionary<string, double> currentMetricsData = new Dictionary<string, double>();
+        private bool currentMetricsIsCharging = false;
+
+        // Timer for TDP reapply when switching to Custom mode
+        private Windows.UI.Xaml.DispatcherTimer qsTdpReapplyTimer;
+
+        /// <summary>
+        /// Initialize Quick Settings resources and build tiles
+        /// </summary>
+        private void InitializeQuickSettings()
+        {
+            if (quickSettingsInitialized) return;
+
+            try
+            {
+                // Clear any stale state from previous initialization attempts
+                // This ensures fresh state when widget is reloaded
+                qsTileDefinitions.Clear();
+                qsTileMap.Clear();
+                qsCustomShortcuts.Clear();
+                qsEditMode = false;
+                qsSelectedTileForMove = null;
+
+                // Tile brushes - consults the active theme (Win11 vs classic)
+                UpdateQuickSettingsThemeBrushes();
+
+                // Default Game Profile gradient brush (matches Performance tab card)
+                tileDefaultProfileBrush = new LinearGradientBrush
+                {
+                    StartPoint = new Windows.Foundation.Point(0, 0),
+                    EndPoint = new Windows.Foundation.Point(1, 1),
+                    GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop { Color = Windows.UI.Color.FromArgb(0x40, 0xC0, 0x40, 0x40), Offset = 0.0 },
+                        new GradientStop { Color = Windows.UI.Color.FromArgb(0x40, 0x40, 0x80, 0x50), Offset = 0.35 },
+                        new GradientStop { Color = Windows.UI.Color.FromArgb(0x40, 0x40, 0x50, 0x80), Offset = 0.65 },
+                        new GradientStop { Color = Windows.UI.Color.FromArgb(0x40, 0x80, 0x40, 0x60), Offset = 1.0 }
+                    }
+                };
+
+                // Define all tiles
+                DefineQuickSettingsTiles();
+
+                // Load visibility settings from storage
+                LoadQuickSettingsConfig();
+
+                // Build tile UI
+                RebuildQuickSettingsTiles();
+
+                // Build sortable grid (for customize panel, initially hidden)
+                BuildSortableGrid();
+
+                quickSettingsInitialized = true;
+                Logger.Info("Quick Settings initialized with system accent color");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error initializing Quick Settings: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// (Re)computes the tile brushes for the active theme. Classic themes keep
+        /// the original dark palette (background tint = on/off signal); the Win11
+        /// theme (fork commit 77a24806) uses one flat neutral tile background and
+        /// signals state via the bottom accent bar instead. Called from
+        /// InitializeQuickSettings and again from ApplyTheme before a rebuild when
+        /// the theme's Win11-ness changed.
+        /// </summary>
+        private void UpdateQuickSettingsThemeBrushes()
+        {
+            if (IsWin11Theme)
+            {
+                // Flat neutral gray for every tile; on/off never tints the background.
+                tileOffBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x35, 0x39, 0x3F)); // #35393F
+                tileOnBrush = tileOffBrush;
+                // tileActive/tileTrigger keep their classic values (unused in the
+                // Win11 code paths, but non-null in case a stray path reads them).
+                tileActiveBrush = tileOffBrush;
+                tileTriggerBrush = tileOffBrush;
+            }
+            else
+            {
+                // Dark mode colors with sharp contrast for handheld devices
+                // On state: use desaturated system accent color for subtle indication
+                var accentDark3 = (Windows.UI.Color)Application.Current.Resources["SystemAccentColorDark3"];
+                // Blend accent with dark gray to reduce saturation (40% accent, 60% dark base)
+                var darkBase = Windows.UI.Color.FromArgb(255, 26, 28, 30); // Same as tile off
+                var desaturatedAccent = Windows.UI.Color.FromArgb(
+                    255,
+                    (byte)((accentDark3.R * 0.4) + (darkBase.R * 0.6)),
+                    (byte)((accentDark3.G * 0.4) + (darkBase.G * 0.6)),
+                    (byte)((accentDark3.B * 0.4) + (darkBase.B * 0.6)));
+                tileOnBrush = new SolidColorBrush(desaturatedAccent);
+
+                // Other tile brushes - dark mode
+                tileOffBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 26, 28, 30));   // #1A1C1E
+                tileActiveBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 26, 37, 48)); // #1A2530 - dark blue
+                tileTriggerBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 37, 32, 48)); // #252030 - dark purple
+            }
+
+            // Win11-mode accent/severity brushes (harmless to compute always).
+            tileAccentBrush = new SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColorLight2"]);
+            // Same muted gray as the state text's "off" color, so the bar is always
+            // present (every tile) but reads as grayed-out when inactive.
+            tileBarOffBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 136, 136, 136));
+            // Light purple - distinct from the accent, used only by action/trigger tiles.
+            tileActionBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 180, 150, 200));
+            // Fixed severity colors - never tied to the live accent.
+            tileSeverityGreenBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xCB, 0x5F));  // Fluent "Success" green
+            tileSeverityBlueBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x4C, 0xC2, 0xFF));   // Windows blue swatch
+            tileSeverityRedBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0x6B, 0x6B));    // App's established warning red
+            tileSeverityPurpleBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xB4, 0xA0, 0xFF)); // Distinct from tileActionBrush
+            tileSeverityYellowBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0xD6, 0x66)); // Battery mid-charge (ours, not the fork's)
+        }
+
+        /// <summary>
+        /// Refresh Quick Settings tiles when Legion status changes
+        /// </summary>
+        private void RefreshQuickSettingsForLegion()
+        {
+            if (!quickSettingsInitialized) return;
+
+            try
+            {
+                RebuildQuickSettingsTiles();
+                BuildSortableGrid();
+                UpdateQuickSettingsTileStates();
+                Logger.Info("Quick Settings refreshed for Legion detection change");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error refreshing Quick Settings for Legion: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Define all available Quick Settings tiles
+        /// </summary>
+        private void DefineQuickSettingsTiles()
+        {
+            qsTileDefinitions.Clear();
+            qsTileMap.Clear();
+
+            int order = 0;
+
+            // Row 1 - Performance Core (most used)
+            AddTileDefinition("TDPMode", "TDP Mode", "\uE945", order: order++);
+            AddTileDefinition("AutoTDP", "AutoTDP", "\uE9F5", order: order++);
+            AddTileDefinition("PowerMode", "Power Mode", "\uEC4A", order: order++);
+            AddTileDefinition("CPUBoost", "CPU Boost", "\uEEA1", order: order++);
+
+            // Row 2 - Performance Fine-tuning
+            AddTileDefinition("EPP", "EPP", "\uE9E9", order: order++);
+            AddTileDefinition("FPSLimit", "FPS Limit", "\uE916", order: order++);
+            AddTileDefinition("RadeonChill", "Chill", "\uE9CA", order: order++);
+            AddTileDefinition("Profile", "Profile", "\uE77B", order: order++);
+
+            // Row 3 - Display
+            AddTileDefinition("Resolution", "Resolution", "\uE7F8", order: order++);
+            AddTileDefinition("RefreshRate", "Refresh Rate", "\uE72C", order: order++); // Refresh
+            AddTileDefinition("Rotation", "Rotation", "\uE7AD", order: order++);
+            AddTileDefinition("HDR", "HDR", "\uE706", order: order++);
+            AddTileDefinition("Fullscreen", "Fullscreen", "\uE740", order: order++);
+
+            // Row 4 - AMD Graphics Features
+            AddTileDefinition("RSR", "RSR", "\uEE71", order: order++);
+            AddTileDefinition("RIS", "RIS", "\uE71E", order: order++);
+            AddTileDefinition("AFMF", "AFMF", "\uEB9D", order: order++);
+            AddTileDefinition("AntiLag", "Anti-Lag", "\uF42F", order: order++);
+
+            // Row 5 - Scaling/Quality
+            AddTileDefinition("LosslessScaling", "Lossless", "\uEA5F", order: order++);
+            AddTileDefinition("Overlay", "Overlay", "\uE9D9", order: order++);
+
+            // Row 6 - Input & Interaction
+            AddTileDefinition("ScreenSaver", "Idle Screen Off", "\uE7E8", order: order++);
+            AddTileDefinition("Keyboard", "Keyboard", "\uE765", isTrigger: true, order: order++);
+            AddTileDefinition("LegionTouchpad", "Touchpad", "\uE962", order: order++);
+            AddTileDefinition("Touchscreen", "Touchscreen", "\uE815", order: order++);
+            AddTileDefinition("LegionRemapControls", "Remap", "\uE7FC", order: order++);
+            AddTileDefinition("LegionDesktopControls", "Desktop", "\uE7F4", order: order++);
+            // Quick toggle for the legacy controller emulation backend; state text shows
+            // the active backend mode (Xbox / DS4 / Mouse) when on, "Off" otherwise.
+            // Single on/off switch for controller emulation (replaces the old
+            // "ControllerEmulation" cycle tile - field request: cycling through device
+            // variants just to turn emulation off was clumsy). On re-enables whatever
+            // device type the user last had selected; the state label still shows it.
+            AddTileDefinition("ControllerEmuPower", "Controller", "\uE7FC", order: order++);
+
+            // Row 7 - System/Device
+            AddTileDefinition("LegionLightMode", "Light Mode", "\uEA80", order: order++);
+            AddTileDefinition("LegionPowerLight", "Power Light", "\uE781", order: order++);
+            AddTileDefinition("LegionChargeLimit", "Charge Limit", "\uEA95", order: order++);
+            AddTileDefinition("LegionFanFullSpeed", "Fan Max", "\uE9CA", order: order++);
+            AddTileDefinition("LegionVibration", "Vibration", "\uE877", order: order++);
+            AddTileDefinition("LegionVibrationMode", "Vib Mode", "\uE877", order: order++);
+            AddTileDefinition("Battery", "Battery", "\uE83F", order: order++);
+
+            // Load custom shortcut tiles from storage
+            LoadCustomShortcutTiles();
+
+            // Row 8 - Quick Actions (high order numbers to keep at bottom)
+            int actionOrder = 1000;
+            AddTileDefinition("ActionTaskManager", "Task Mgr", "\uE7EF", isAction: true, order: actionOrder++);
+            AddTileDefinition("ActionExplorer", "Explorer", "\uEC50", isAction: true, order: actionOrder++);
+            AddTileDefinition("ActionEndTask", "End Task", "\uE711", isAction: true, order: actionOrder++);
+            AddTileDefinition("ActionHibernate", "Hibernate", "\uE708", isAction: true, order: actionOrder++);
+        }
+
+        private void AddTileDefinition(string id, string name, string glyph, bool isTrigger = false, bool isAction = false, string customShortcut = null, int order = 0)
+        {
+            var def = new TileDefinition { Id = id, Name = name, Glyph = glyph, IsVisible = true, IsTrigger = isTrigger, IsAction = isAction, CustomShortcut = customShortcut, Order = order };
+            qsTileDefinitions.Add(def);
+            qsTileMap[id] = def;
+        }
+
+        /// <summary>
+        /// Load custom shortcut tiles from storage using QuickSettingsConfig
+        /// </summary>
+        private void LoadCustomShortcutTiles()
+        {
+            try
+            {
+                // Load from QuickSettingsConfig (the new unified storage)
+                var config = QuickSettings.QuickSettingsConfig.Instance;
+                var customTiles = config.Tiles.Where(t => t.Type == QuickSettings.TileType.CustomShortcut).ToList();
+
+                // Calculate starting order (after built-in tiles)
+                int startingOrder = qsTileDefinitions.Count > 0 ? qsTileDefinitions.Max(t => t.Order) + 1 : 100;
+
+                int index = 0;
+                foreach (var tile in customTiles)
+                {
+                    if (!string.IsNullOrEmpty(tile.CustomShortcut))
+                    {
+                        // Use the stable GUID from QuickSettingsConfig instead of index-based ID
+                        // This prevents tile ID mismatch when widget is reloaded
+                        string tileId = tile.Id;
+                        var def = new TileDefinition
+                        {
+                            Id = tileId,
+                            Name = tile.Name,
+                            Glyph = tile.Icon ?? "\uE768",
+                            IsVisible = tile.IsVisible,
+                            IsTrigger = true,
+                            CustomShortcut = tile.CustomShortcut,
+                            Order = startingOrder + index  // Order will be overridden by LoadQuickSettingsConfig if saved
+                        };
+                        qsTileDefinitions.Add(def);
+                        qsTileMap[tileId] = def;
+                        qsCustomShortcuts.Add(def);
+                        index++;
+                    }
+                }
+                Logger.Info($"Loaded {index} custom shortcut tiles from QuickSettingsConfig (using stable GUIDs)");
+
+                // Migration: If old storage has shortcuts that aren't in the new system, migrate them
+                MigrateOldCustomShortcuts();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error loading custom shortcut tiles: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Migrate old custom shortcuts from the legacy storage format to QuickSettingsConfig
+        /// </summary>
+        private void MigrateOldCustomShortcuts()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings;
+                if (settings.Values.TryGetValue("QS_CustomShortcuts", out object val) && val is string data && !string.IsNullOrEmpty(data))
+                {
+                    var config = QuickSettings.QuickSettingsConfig.Instance;
+                    var existingShortcuts = config.Tiles
+                        .Where(t => t.Type == QuickSettings.TileType.CustomShortcut)
+                        .Select(t => t.CustomShortcut)
+                        .ToHashSet();
+
+                    var shortcuts = data.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    int migratedCount = 0;
+
+                    foreach (var shortcut in shortcuts)
+                    {
+                        var parts = shortcut.Split('|');
+                        if (parts.Length == 2 && !existingShortcuts.Contains(parts[1]))
+                        {
+                            // Add to QuickSettingsConfig if not already present
+                            config.AddCustomTile(parts[0], "\uE768", parts[1]);
+                            migratedCount++;
+                        }
+                    }
+
+                    if (migratedCount > 0)
+                    {
+                        Logger.Info($"Migrated {migratedCount} custom shortcuts from legacy storage");
+                        // Clear old storage after migration
+                        settings.Values.Remove("QS_CustomShortcuts");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error migrating old custom shortcuts: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Save custom shortcut tiles to QuickSettingsConfig
+        /// Note: This is now handled automatically by QuickSettingsConfig.AddCustomTile
+        /// This method is kept for compatibility but delegates to QuickSettingsConfig
+        /// </summary>
+        private void SaveCustomShortcutTiles()
+        {
+            try
+            {
+                // QuickSettingsConfig.Save() is called automatically by AddCustomTile
+                // This method now just triggers a save to ensure consistency
+                QuickSettings.QuickSettingsConfig.Instance.Save();
+                Logger.Info($"Custom shortcut tiles saved to QuickSettingsConfig");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error saving custom shortcut tiles: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Add a new custom shortcut tile using QuickSettingsConfig
+        /// </summary>
+        private void AddCustomShortcutTile(string name, string shortcut)
+        {
+            try
+            {
+                // Add to QuickSettingsConfig (saves automatically) - returns tile with GUID
+                var config = QuickSettings.QuickSettingsConfig.Instance;
+                var configTile = config.AddCustomTile(name, "\uE768", shortcut);
+
+                // Calculate new order (place at end)
+                int maxOrder = qsTileDefinitions.Count > 0 ? qsTileDefinitions.Max(t => t.Order) : 0;
+
+                // Use the GUID from QuickSettingsConfig for stable tile identification
+                string tileId = configTile.Id;
+                var def = new TileDefinition
+                {
+                    Id = tileId,
+                    Name = name,
+                    Glyph = "\uE768",
+                    IsVisible = true,
+                    IsTrigger = true,
+                    CustomShortcut = shortcut,
+                    Order = maxOrder + 1
+                };
+                qsTileDefinitions.Add(def);
+                qsTileMap[tileId] = def;
+                qsCustomShortcuts.Add(def);
+
+                RebuildQuickSettingsTiles();
+                BuildSortableGrid();
+
+                Logger.Info($"Added custom shortcut tile: {name} -> {shortcut} (id: {tileId})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error adding custom shortcut tile: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Load Quick Settings configuration from storage
+        /// </summary>
+        private void LoadQuickSettingsConfig()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings;
+
+                // Load column count setting
+                if (settings.Values.TryGetValue("QS_ColumnCount", out object colVal) && colVal is int colCount)
+                {
+                    qsColumnCount = Math.Max(3, Math.Min(5, colCount));  // Clamp to 3-5
+                }
+
+                // Load Quick Metrics toggle state
+                if (settings.Values.TryGetValue(QuickMetricsEnabledKey, out object metricsVal) && metricsVal is bool metricsEnabled)
+                {
+                    quickMetricsEnabled = metricsEnabled;
+                }
+
+                // Load panel brightness slider show preference (hidden by default)
+                if (settings.Values.TryGetValue(PanelBrightnessShowKey, out object pbShowVal) && pbShowVal is bool pbShow)
+                {
+                    panelBrightnessShow = pbShow;
+                }
+                if (PanelBrightnessShowToggle != null) PanelBrightnessShowToggle.IsOn = panelBrightnessShow;
+                UpdatePanelBrightnessRowVisibility();
+
+                // Load Screen Saver toggle state
+                if (settings.Values.TryGetValue(ScreenSaverEnabledKey, out object ssVal) && ssVal is bool ssEnabled)
+                {
+                    screenSaverEnabled = ssEnabled;
+                    if (screenSaverEnabled)
+                    {
+                        StartScreenSaverCountdown();
+                    }
+                }
+
+                // Load Quick Metrics selection
+                selectedMetrics.Clear();
+                if (settings.Values.TryGetValue(QuickMetricsSelectionKey, out object selectionVal) && selectionVal is string selectionStr)
+                {
+                    // Parse comma-separated metric IDs
+                    foreach (var id in selectionStr.Split(','))
+                    {
+                        if (Enum.TryParse<MetricType>(id.Trim(), out var metricType))
+                        {
+                            selectedMetrics.Add(metricType);
+                        }
+                    }
+                }
+                else
+                {
+                    // Default selection: Battery Drain, CPU Usage, CPU Temp, GPU Usage, Time Remaining
+                    selectedMetrics.AddRange(new[] { MetricType.BatteryDrain, MetricType.CPUUsage, MetricType.CPUTemp, MetricType.GPUUsage, MetricType.TimeRemaining });
+                }
+
+                // Update Quick Metrics UI
+                if (QuickMetricsToggle != null)
+                    QuickMetricsToggle.IsOn = quickMetricsEnabled;
+                if (QuickMetricsRow != null)
+                    QuickMetricsRow.Visibility = quickMetricsEnabled ? Visibility.Visible : Visibility.Collapsed;
+                if (MetricsSelectionPanel != null)
+                    MetricsSelectionPanel.Visibility = quickMetricsEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+                // Update checkboxes and rebuild metrics grid
+                UpdateMetricCheckboxes();
+                RebuildMetricsGrid();
+
+                foreach (var tile in qsTileDefinitions)
+                {
+                    string visKey = $"QS_{tile.Id}_Visible";
+                    string orderKey = $"QS_{tile.Id}_Order";
+
+                    if (settings.Values.TryGetValue(visKey, out object val) && val is bool visible)
+                    {
+                        tile.IsVisible = visible;
+                    }
+                    if (settings.Values.TryGetValue(orderKey, out object orderVal) && orderVal is int order)
+                    {
+                        tile.Order = order;
+                    }
+                    if (settings.Values.TryGetValue($"QS_{tile.Id}_Hotkey", out object hkVal) && hkVal is string hk)
+                    {
+                        tile.ControllerHotkey = hk;
+                    }
+                }
+
+                Logger.Info($"Quick Settings config loaded (columns: {qsColumnCount})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error loading Quick Settings config: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Save Quick Settings configuration to storage
+        /// </summary>
+        private void SaveQuickSettingsConfig()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings;
+
+                // Save column count setting
+                settings.Values["QS_ColumnCount"] = qsColumnCount;
+
+                foreach (var tile in qsTileDefinitions)
+                {
+                    settings.Values[$"QS_{tile.Id}_Visible"] = tile.IsVisible;
+                    settings.Values[$"QS_{tile.Id}_Order"] = tile.Order;
+                    settings.Values[$"QS_{tile.Id}_Hotkey"] = tile.ControllerHotkey ?? "";
+                }
+
+                Logger.Info($"Quick Settings config saved (columns: {qsColumnCount})");
+                SendTileHotkeysToHelper();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error saving Quick Settings config: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Send Quick Metrics enabled state to helper
+        /// </summary>
+        private void PanelBrightnessShowToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (PanelBrightnessShowToggle == null) return;
+            panelBrightnessShow = PanelBrightnessShowToggle.IsOn;
+            ApplicationData.Current.LocalSettings.Values[PanelBrightnessShowKey] = panelBrightnessShow;
+            UpdatePanelBrightnessRowVisibility();
+            Logger.Info($"Panel brightness slider show: {panelBrightnessShow}");
+        }
+
+        private void UpdatePanelBrightnessRowVisibility()
+        {
+            if (PanelBrightnessRow != null)
+                PanelBrightnessRow.Visibility = panelBrightnessShow ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // Slider drag -> helper (panelBrightness WidgetSliderProperty debounces + pipes the Set).
+        // Also updates the % label live. The property object owns the pipe send; here we only
+        // reflect the number so the label tracks the thumb.
+        private void PanelBrightnessSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (PanelBrightnessValueText != null)
+                PanelBrightnessValueText.Text = $"{(int)e.NewValue}%";
+        }
+
+        private void SendQuickMetricsEnabledToHelper()
+        {
+            try
+            {
+                if (!App.IsConnected) return;
+
+                var request = new Windows.Foundation.Collections.ValueSet
+                {
+                    { "Command", (int)Shared.Enums.Command.Set },
+                    { "Function", (int)Shared.Enums.Function.QuickMetricsEnabled },
+                    { "Content", quickMetricsEnabled }
+                };
+                // Fire-and-forget: helper processes this but doesn't send a response,
+                // so using SendRequestAsync would timeout after 10s for no reason
+                App.PipeClient?.SendValueSet(request);
+                Logger.Info($"Sent Quick Metrics enabled state to helper: {quickMetricsEnabled}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error sending Quick Metrics enabled state: {ex.Message}");
+            }
+        }
+
+        private void SendScreenSaverEnabledToHelper()
+        {
+            try
+            {
+                if (!App.IsConnected) return;
+
+                var request = new Windows.Foundation.Collections.ValueSet
+                {
+                    { "Command", (int)Shared.Enums.Command.Set },
+                    { "Function", (int)Shared.Enums.Function.ScreenSaverEnabled },
+                    { "Content", screenSaverEnabled }
+                };
+                // Fire-and-forget: helper processes this but doesn't send a response,
+                // so using SendRequestAsync would timeout after 10s for no reason
+                App.PipeClient?.SendValueSet(request);
+                Logger.Info($"Sent Screen Saver enabled state to helper: {screenSaverEnabled}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error sending Screen Saver enabled state: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Send current controller hotkey config to helper via pipe so it can update
+        /// its cached config for XInput-based button combo detection.
+        /// </summary>
+        private void SendControllerHotkeyConfigToHelper()
+        {
+            try
+            {
+                if (!App.IsConnected) return;
+
+                var settings = ApplicationData.Current.LocalSettings;
+                var hotkeyNames = new[] { "MenuA", "MenuB", "MenuX", "MenuY", "MenuDpadUp", "MenuDpadDown", "MenuDpadLeft", "MenuDpadRight" };
+
+                // Build JSON config matching what ApplyControllerHotkeyConfig expects
+                var jsonObj = new Windows.Data.Json.JsonObject();
+                foreach (var name in hotkeyNames)
+                {
+                    int action = (int)(settings.Values[$"Hotkey_{name}_Action"] ?? 0);
+                    string key = settings.Values[$"Hotkey_{name}_Key"] as string ?? "";
+                    jsonObj[$"{name}_Action"] = Windows.Data.Json.JsonValue.CreateNumberValue(action);
+                    jsonObj[$"{name}_Key"] = Windows.Data.Json.JsonValue.CreateStringValue(key);
+                }
+
+                string configJson = jsonObj.Stringify();
+
+                var request = new Windows.Foundation.Collections.ValueSet
+                {
+                    { "Command", (int)Shared.Enums.Command.Set },
+                    { "Function", (int)Shared.Enums.Function.ControllerHotkeyConfig },
+                    { "Content", configJson }
+                };
+                App.PipeClient?.SendValueSet(request);
+                Logger.Info($"Sent controller hotkey config to helper");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error sending controller hotkey config: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Send all tiles that have a controller-combo binding to the helper as a JSON array
+        /// [{ "id", "name", "mask" }]. Sent on config save and on pipe connect.
+        /// </summary>
+        internal void SendTileHotkeysToHelper()
+        {
+            try
+            {
+                if (!App.IsConnected) return;
+
+                var arr = new Windows.Data.Json.JsonArray();
+                foreach (var tile in qsTileDefinitions)
+                {
+                    if (string.IsNullOrEmpty(tile.ControllerHotkey)) continue;
+                    if (!uint.TryParse(tile.ControllerHotkey, out uint mask) || mask == 0) continue;
+
+                    var o = new Windows.Data.Json.JsonObject
+                    {
+                        ["id"] = Windows.Data.Json.JsonValue.CreateStringValue(tile.Id),
+                        ["name"] = Windows.Data.Json.JsonValue.CreateStringValue(tile.Name ?? ""),
+                        ["mask"] = Windows.Data.Json.JsonValue.CreateNumberValue(mask)
+                    };
+                    arr.Add(o);
+                }
+
+                var request = new Windows.Foundation.Collections.ValueSet
+                {
+                    { "Command", (int)Shared.Enums.Command.Set },
+                    { "Function", (int)Shared.Enums.Function.TileHotkeyConfig },
+                    { "Content", arr.Stringify() }
+                };
+                App.PipeClient?.SendValueSet(request);
+                Logger.Info($"Sent {arr.Count} tile hotkey binding(s) to helper");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error sending tile hotkeys: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The small "assign controller combo" button shown under each tile in edit mode.
+        /// Shows the current combo (e.g. "Menu+A") or "+ Combo" when unbound.
+        /// </summary>
+        private Button CreateTileComboBindButton(TileDefinition tile)
+        {
+            uint mask = 0;
+            if (!string.IsNullOrEmpty(tile.ControllerHotkey)) uint.TryParse(tile.ControllerHotkey, out mask);
+            bool bound = mask != 0;
+
+            // Bound combos render as glyph sequences (View + Y1 -> [view][+][y1]);
+            // unbound tiles keep the "+ Combo" text.
+            object btnContent;
+            if (bound)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                bool first = true;
+                foreach (var b in Shared.Input.ControllerComboButtons.All)
+                {
+                    if ((mask & b.Bit) != b.Bit) continue;
+                    if (!first)
+                    {
+                        row.Children.Add(new TextBlock
+                        {
+                            Text = "+", FontSize = 10,
+                            Margin = new Thickness(2, 0, 2, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                    }
+                    first = false;
+                    if (RemapGlyphMap.TryGetValue(b.Label, out var comboGlyph))
+                    {
+                        row.Children.Add(new Windows.UI.Xaml.Controls.Image
+                        {
+                            Width = 16, Height = 16,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Source = CreateGlyphSource(comboGlyph, 32),
+                        });
+                    }
+                    else
+                    {
+                        row.Children.Add(new TextBlock
+                        {
+                            Text = b.Label, FontSize = 11,
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                    }
+                }
+                btnContent = row;
+            }
+            else
+            {
+                btnContent = new TextBlock { Text = "+ Combo", FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
+            }
+
+            var btn = new Button
+            {
+                Content = btnContent,
+                Tag = tile.Id,
+                Margin = new Thickness(0, 2, 0, 0),
+                Padding = new Thickness(4, 2, 4, 2),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Foreground = new SolidColorBrush(bound
+                    ? Windows.UI.Color.FromArgb(255, 120, 200, 255)
+                    : Windows.UI.Color.FromArgb(255, 150, 150, 150))
+            };
+            btn.Click += (s, e) => OpenTileComboFlyout(tile, btn);
+            return btn;
+        }
+
+        /// <summary>
+        /// Popup to assign a controller-button combo to a tile. Multi-select checkbox list
+        /// (deliberately not press-to-capture: a physical button press would dismiss the Game
+        /// Bar overlay). Requires >= 2 buttons. Saving persists + syncs to the helper.
+        /// </summary>
+        private void OpenTileComboFlyout(TileDefinition tile, FrameworkElement anchor)
+        {
+            try
+            {
+                uint currentMask = 0;
+                if (!string.IsNullOrEmpty(tile.ControllerHotkey)) uint.TryParse(tile.ControllerHotkey, out currentMask);
+
+                var panel = new StackPanel { MinWidth = 240 };
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"Combo for {tile.Name}",
+                    FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 2)
+                });
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Pick 2 or more buttons. Hold them together to activate this tile.",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 150, 150, 150)),
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 6)
+                });
+
+                var grid = new Grid();
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                var buttons = Shared.Input.ControllerComboButtons.All;
+                int rows = (buttons.Length + 1) / 2;
+                for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                var checks = new List<(CheckBox cb, uint bit)>();
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    var b = buttons[i];
+                    var cbContent = new StackPanel { Orientation = Orientation.Horizontal };
+                    if (RemapGlyphMap.TryGetValue(b.Label, out var comboGlyph))
+                    {
+                        cbContent.Children.Add(new Windows.UI.Xaml.Controls.Image
+                        {
+                            Width = 18, Height = 18,
+                            Margin = new Thickness(0, 0, 6, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Source = CreateGlyphSource(comboGlyph, 36),
+                        });
+                    }
+                    cbContent.Children.Add(new TextBlock
+                    {
+                        Text = b.Label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                    });
+                    var cb = new CheckBox
+                    {
+                        Content = cbContent,
+                        IsChecked = (currentMask & b.Bit) == b.Bit,
+                        MinWidth = 0,
+                        Margin = new Thickness(0, -2, 0, -2)
+                    };
+                    checks.Add((cb, b.Bit));
+                    Grid.SetColumn(cb, i % 2);
+                    Grid.SetRow(cb, i / 2);
+                    grid.Children.Add(cb);
+                }
+                panel.Children.Add(grid);
+
+                var status = new TextBlock
+                {
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 130, 130)),
+                    Margin = new Thickness(0, 4, 0, 0)
+                };
+                panel.Children.Add(status);
+
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+                var saveBtn = new Button { Content = "Save", Margin = new Thickness(0, 0, 6, 0) };
+                var clearBtn = new Button { Content = "Clear" };
+                row.Children.Add(saveBtn);
+                row.Children.Add(clearBtn);
+                panel.Children.Add(row);
+
+                var flyout = new Flyout { Content = new ScrollViewer { Content = panel, MaxHeight = 380 } };
+
+                saveBtn.Click += (s, e) =>
+                {
+                    uint mask = 0;
+                    foreach (var c in checks) if (c.cb.IsChecked == true) mask |= c.bit;
+                    if (Shared.Input.ControllerComboButtons.BitCount(mask) < 2)
+                    {
+                        status.Text = "Pick at least 2 buttons.";
+                        return;
+                    }
+
+                    // A combo already bound to a different tile would silently overwrite it at
+                    // the helper (RegisterTileHotkey keys by mask) - block it here instead.
+                    foreach (var other in qsTileDefinitions)
+                    {
+                        if (other.Id == tile.Id || string.IsNullOrEmpty(other.ControllerHotkey)) continue;
+                        if (uint.TryParse(other.ControllerHotkey, out uint otherMask) && otherMask == mask)
+                        {
+                            status.Text = $"Already used by \"{other.Name}\".";
+                            return;
+                        }
+                    }
+
+                    tile.ControllerHotkey = mask.ToString();
+                    SaveQuickSettingsConfig();   // persists + SendTileHotkeysToHelper
+                    flyout.Hide();
+                    RebuildQuickSettingsTiles();
+                };
+                clearBtn.Click += (s, e) =>
+                {
+                    tile.ControllerHotkey = null;
+                    SaveQuickSettingsConfig();
+                    flyout.Hide();
+                    RebuildQuickSettingsTiles();
+                };
+
+                flyout.ShowAt(anchor);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"OpenTileComboFlyout error: {ex.Message}");
+            }
+        }
+    }
+}

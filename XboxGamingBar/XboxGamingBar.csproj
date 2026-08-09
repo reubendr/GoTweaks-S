@@ -1,0 +1,739 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProjectGuid>{94D05A38-04B0-4EA4-AD28-4ADFE4719E84}</ProjectGuid>
+    <OutputType>AppContainerExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>XboxGamingBar</RootNamespace>
+    <AssemblyName>XboxGamingBar</AssemblyName>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
+    <TargetPlatformVersion Condition=" '$(TargetPlatformVersion)' == '' ">10.0.26100.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.18362.0</TargetPlatformMinVersion>
+    <MinimumVisualStudioVersion>14</MinimumVisualStudioVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <WindowsXamlEnableOverview>true</WindowsXamlEnableOverview>
+    <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <GenerateTestArtifacts>True</GenerateTestArtifacts>
+    <AppxBundle>Always</AppxBundle>
+    <AppxBundlePlatforms>x86</AppxBundlePlatforms>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+    <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseWinFormsOutOfProcDesigner>False</UseWinFormsOutOfProcDesigner>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <Optimize>true</Optimize>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+    <UseWinFormsOutOfProcDesigner>False</UseWinFormsOutOfProcDesigner>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseWinFormsOutOfProcDesigner>False</UseWinFormsOutOfProcDesigner>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <Optimize>true</Optimize>
+    <NoWarn>;2008</NoWarn>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <ErrorReport>prompt</ErrorReport>
+    <Prefer32Bit>true</Prefer32Bit>
+    <UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+    <UseWinFormsOutOfProcDesigner>False</UseWinFormsOutOfProcDesigner>
+  </PropertyGroup>
+  <PropertyGroup>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Converter\BooleanToVisibilityConverter.cs" />
+    <Compile Include="Converter\InverseBooleanToVisibilityConverter.cs" />
+    <Compile Include="Converter\RadeonBoostResolutionStringConverter.cs" />
+    <Compile Include="Converter\SharpnessPercentStringConverter.cs" />
+    <Compile Include="Data\AMD\AMDRadeonAntiLagEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonAntiLagSupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDFluidMotionFrameEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDFluidMotionFrameSupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDFluidMotionFrameComboProperty.cs" />
+    <Compile Include="Data\AMD\AMDFluidMotionFrameV1SupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonBoostEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonBoostResolutionProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonBoostSupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonChillEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonChillMaxFPSProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonChillMinFPSProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonChillSupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonSuperResolutionEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonSuperResolutionSharpnessProperty.cs" />
+    <Compile Include="Data\AMD\AMDImageSharpeningEnabledProperty.cs" />
+    <Compile Include="Data\AMD\AMDImageSharpeningSupportedProperty.cs" />
+    <Compile Include="Data\AMD\AMDImageSharpeningSharpnessProperty.cs" />
+    <Compile Include="Data\AMD\AMDDisplayColorProperties.cs" />
+    <Compile Include="Data\AutoStartRTSSProperty.cs" />
+    <Compile Include="Data\LegionSteamInputModeProperty.cs" />
+    <Compile Include="Data\Profile\DeleteGameProfileProperty.cs" />
+
+    <Compile Include="Data\Profile\ProfileMatchByExeProperty.cs" />
+    <Compile Include="Data\Profile\ProfileGamesOnlyProperty.cs" />
+    <Compile Include="Data\TdpMethodProperty.cs" />
+    <Compile Include="Data\EmulationBackendProperty.cs" />
+    <Compile Include="Data\UsbipInstalledProperty.cs" />
+    <Compile Include="Data\ViiperStringComboProperty.cs" />
+    <Compile Include="Data\ViiperSwapRumbleMotorsProperty.cs" />
+    <Compile Include="Data\ViiperRumbleIntensityProperty.cs" />
+    <Compile Include="Data\ViiperMirrorLightbarToStickProperty.cs" />
+    <Compile Include="Data\ViiperStickGyroEnabledProperty.cs" />
+    <Compile Include="Data\ViiperJoyconGyroPerHalfProperty.cs" />
+    <Compile Include="Data\InstallUsbipProperty.cs" />
+    <Compile Include="Data\HidHideInstalledProperty.cs" />
+    <Compile Include="Data\InstallHidHideProperty.cs" />
+    <Compile Include="Data\SetupWarningsProperty.cs" />
+    <Compile Include="Data\ViiperAlternateGyroConventionProperty.cs" />
+    <Compile Include="Data\ViiperStickTriggerConfigProperty.cs" />
+    <Compile Include="Data\ViiperTuningProperty.cs" />
+    <Compile Include="Data\ViiperStickTriggerPreviewEnabledProperty.cs" />
+    <Compile Include="Data\ViiperStickTriggerLiveSampleProperty.cs" />
+    <Compile Include="Data\WinRing0AvailableProperty.cs" />
+    <Compile Include="Data\PawnIOAvailableProperty.cs" />
+    <Compile Include="Data\PawnIOInstalledProperty.cs" />
+    <Compile Include="Data\InstallPawnIOProperty.cs" />
+    <Compile Include="Data\CPUBoostProperty.cs" />
+    <Compile Include="Data\IsForegroundProperty.cs" />
+    <!-- GPU Clock - DISABLED: Not supported by RyzenAdj on this hardware (returns error -1) -->
+    <!--<Compile Include="Data\LimitGPUClockProperty.cs" />
+    <Compile Include="Data\GPUClockMinProperty.cs" />
+    <Compile Include="Data\GPUClockMaxProperty.cs" />-->
+    <Compile Include="Data\CPUEPPProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingInstalledProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingRunningProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingEnabledProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingScalingTypeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingSharpnessProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingFSROptimizeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingAnime4KSizeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingAnime4KVRSProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingScaleModeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingScaleFactorProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingAspectRatioProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingFrameGenTypeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLSFG3ModeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLSFG3MultiplierProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLSFG3TargetProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLSFG2ModeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingFlowScaleProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingSizeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingCurrentProfileProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingAutoScaleProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingAutoScaleDelayProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingSaveAndRestartProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingCreateProfileProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingBringToForegroundProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLaunchProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingSyncModeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingCaptureApiProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingDrawFpsProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingHdrSupportProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingGsyncSupportProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingResizeBeforeScalingProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingLS1TypeProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingMaxFrameLatencyProperty.cs" />
+    <Compile Include="Data\LosslessScaling\LosslessScalingResetProfileProperty.cs" />
+    <Compile Include="Data\Legion\LegionGoDetectedProperty.cs" />
+    <Compile Include="Data\GPD\GPDDetectedProperty.cs" />
+    <Compile Include="Data\GPD\GPDWin5ConnectedProperty.cs" />
+    <Compile Include="Data\GPD\GPDDeviceNameProperty.cs" />
+    <Compile Include="Data\GPD\GPDSupportsFanControlProperty.cs" />
+    <Compile Include="Data\GPD\GPDFanSpeedProperty.cs" />
+    <Compile Include="Data\GPD\GPDFanRPMProperty.cs" />
+    <Compile Include="Data\GPD\GPDFanModeProperty.cs" />
+    <Compile Include="Data\GPD\GPDFanCurveProperty.cs" />
+    <Compile Include="Data\GPD\GPDButtonProperty.cs" />
+    <Compile Include="Data\GPD\GPDRestoreDefaultsProperty.cs" />
+    <Compile Include="Data\GPD\GPDApplyMappingsProperty.cs" />
+    <Compile Include="Data\GPD\GPDButtonL4Property.cs" />
+    <Compile Include="Data\GPD\GPDButtonR4Property.cs" />
+    <Compile Include="Data\Controller\ControllerEmulationProperties.cs" />
+    <Compile Include="Data\Legion\LegionTouchpadEnabledProperty.cs" />
+    <Compile Include="Data\Legion\LegionLightModeProperty.cs" />
+    <Compile Include="Data\Legion\LegionLightColorProperty.cs" />
+    <Compile Include="Data\Legion\LegionLightBrightnessProperty.cs" />
+    <Compile Include="Data\Legion\LegionLightSpeedProperty.cs" />
+    <Compile Include="Data\Legion\LegionPerformanceModeProperty.cs" />
+    <Compile Include="Data\Legion\LegionCustomTDPProperty.cs" />
+    <Compile Include="Data\Legion\LegionFanFullSpeedProperty.cs" />
+    <Compile Include="Data\Legion\LegionUnlockFanCurveProperty.cs" />
+    <Compile Include="Data\Legion\LegionFanCurveProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroEnabledProperty.cs" />
+    <Compile Include="Data\Legion\LegionVibrationProperty.cs" />
+    <Compile Include="Data\Legion\LegionPowerLightProperty.cs" />
+    <Compile Include="Data\Legion\LegionChargeLimitProperty.cs" />
+    <Compile Include="Data\Legion\LegionButtonY1Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonY2Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonY3Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonM1Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonM2Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonM3Property.cs" />
+    <Compile Include="Data\Legion\LegionButtonDesktopProperty.cs" />
+    <Compile Include="Data\Legion\LegionButtonPageProperty.cs" />
+    <Compile Include="Data\Legion\LegionNintendoLayoutProperty.cs" />
+    <Compile Include="Data\Legion\LegionDesktopControlsProperty.cs" />
+    <Compile Include="Data\Legion\LegionVibrationModeProperty.cs" />
+    <Compile Include="Data\Legion\LegionControllerProfileProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroTargetProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroSensitivityXProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroSensitivityYProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroInvertXProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroInvertYProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroMappingTypeProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroActivationModeProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroActivationButtonProperty.cs" />
+    <Compile Include="Data\Legion\LegionGyroDeadzoneProperty.cs" />
+    <Compile Include="Data\Legion\LegionLeftStickDeadzoneProperty.cs" />
+    <Compile Include="Data\Legion\LegionRightStickDeadzoneProperty.cs" />
+    <Compile Include="Data\Legion\LegionLeftTriggerStartProperty.cs" />
+    <Compile Include="Data\Legion\LegionLeftTriggerEndProperty.cs" />
+    <Compile Include="Data\Legion\LegionRightTriggerStartProperty.cs" />
+    <Compile Include="Data\Legion\LegionRightTriggerEndProperty.cs" />
+    <Compile Include="Data\Legion\LegionHairTriggersProperty.cs" />
+    <Compile Include="Data\Legion\LegionTouchpadVibrationProperty.cs" />
+    <Compile Include="Data\Legion\LegionJoystickAsMouseModeProperty.cs" />
+    <Compile Include="Data\Legion\LegionJoystickMouseSensProperty.cs" />
+    <Compile Include="Data\Legion\LegionGamepadMappingProperty.cs" />
+    <Compile Include="Data\Controller\ControllerBatteryLeftProperty.cs" />
+    <Compile Include="Data\Controller\ControllerBatteryRightProperty.cs" />
+    <Compile Include="Data\Controller\ControllerChargingLeftProperty.cs" />
+    <Compile Include="Data\Controller\ControllerChargingRightProperty.cs" />
+    <Compile Include="Data\Controller\ControllerConnectedLeftProperty.cs" />
+    <Compile Include="Data\Controller\ControllerConnectedRightProperty.cs" />
+    <Compile Include="Data\Controller\ControllerDockedLeftProperty.cs" />
+    <Compile Include="Data\Controller\LegionControllerInputModeProperty.cs" />
+    <Compile Include="Data\Controller\LegionMcuFirmwareVersionProperty.cs" />
+    <Compile Include="Data\Controller\LegionRgbActiveProfileProperty.cs" />
+    <Compile Include="Data\Controller\LegionGamepadModeSelectProperty.cs" />
+    <Compile Include="Data\Controller\LegionOsReportingDisabledProperty.cs" />
+    <Compile Include="Data\Controller\ControllerDockedRightProperty.cs" />
+    <Compile Include="Data\Controller\ControllerVidPidProperty.cs" />
+    <Compile Include="Data\Controller\ControllerDeviceStatusProperty.cs" />
+    <Compile Include="Data\Device\DeviceDisplayNameProperty.cs" />
+    <Compile Include="Data\Device\DeviceSupportsControllerRemapProperty.cs" />
+    <Compile Include="Data\Device\DeviceSupportsRgbLightingProperty.cs" />
+    <Compile Include="Data\Device\DeviceSupportsGyroProperty.cs" />
+    <Compile Include="Data\Device\DeviceHasScrollWheelProperty.cs" />
+    <Compile Include="Data\Device\DeviceHasDetachableControllersProperty.cs" />
+    <Compile Include="Data\Device\DeviceHasTouchpadProperty.cs" />
+    <Compile Include="Data\Profile\DefaultGameProfileAvailableProperty.cs" />
+    <Compile Include="Data\Profile\DefaultGameProfileDataProperty.cs" />
+    <Compile Include="Data\Profile\DefaultGameProfileEnabledProperty.cs" />
+    <Compile Include="Data\AutoTDP\AutoTDPProperties.cs" />
+    <Compile Include="Data\OnScreenDisplayProviderProperty.cs" />
+    <Compile Include="Data\PerGameProfileProperty.cs" />
+    <Compile Include="Data\OSDProperty.cs" />
+    <Compile Include="Data\AMD\AMDRadeonSuperResolutionSupportedProperty.cs" />
+    <Compile Include="Data\RefreshRateProperty.cs" />
+    <Compile Include="Data\RefreshRatesProperty.cs" />
+    <Compile Include="Data\ResolutionProperty.cs" />
+    <Compile Include="Data\ResolutionsProperty.cs" />
+    <Compile Include="Data\DisplayOrientationProperty.cs" />
+    <Compile Include="Data\InternalPanelActiveProperty.cs" />
+    <Compile Include="Data\IntTagComboProperty.cs" />
+    <Compile Include="Data\PowerButtonActionProperty.cs" />
+    <Compile Include="Data\HDRSupportedProperty.cs" />
+    <Compile Include="Data\HDREnabledProperty.cs" />
+    <Compile Include="Data\AdaptiveBrightnessModeProperty.cs" />
+    <Compile Include="Data\RTSSInstalledProperty.cs" />
+    <Compile Include="Data\PanelBrightnessSupportedProperty.cs" />
+    <Compile Include="Data\TouchscreenEnabledProperty.cs" />
+    <Compile Include="Data\FPSLimitProperty.cs" />
+    <Compile Include="Data\OSPowerModeProperty.cs" />
+    <Compile Include="Data\RunningGameProperty.cs" />
+    <Compile Include="Data\TrackedGameProperty.cs" />
+    <Compile Include="Data\Base\WidgetControlEnabledProperty.cs" />
+    <Compile Include="Data\Base\WidgetSliderProperty.cs" />
+    <Compile Include="Data\TDPProperty.cs" />
+    <Compile Include="Data\CurrentTDPProperty.cs" />
+    <Compile Include="Data\Base\WidgetControlProperty.cs" />
+    <Compile Include="Data\Base\WidgetProperties.cs" />
+    <Compile Include="Data\Base\WidgetProperty.cs" />
+    <Compile Include="Data\Base\WidgetPropertyWithAdditionalUI.cs" />
+    <Compile Include="Data\Base\WidgetToggleProperty.cs" />
+    <Compile Include="Event\BackgroundTaskCancellationEventArgs.cs" />
+    <Compile Include="IPC\NamedPipeClient.cs" />
+    <Compile Include="GamingWidget.PowerAndSleep.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GamingWidget.xaml.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GamingWidget.ViiperStickTrigger.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GamingWidget.ViiperGyroTuning.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileDeletion.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.Lifecycle.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.DispatcherHealth.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.TabSettings.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Setup\GamingWidget.SetupTab.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\LosslessScaling\GamingWidget.ChillFPS.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Hotkeys\GamingWidget.HotkeyInit.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Display\GamingWidget.DisplayGating.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.WidgetEvents.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.WidgetStyle.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileManagement.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileSettingsSubscription.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileSwitching.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileStorage.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileDisplay.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileCards.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Profile\GamingWidget.ProfileCustomization.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.PerformanceOverlay.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.PowerSource.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.StickyTDP.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.PowerSourceEvents.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.Focus.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.NavCustomization.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Navigation\GamingWidget.Navigation.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\LosslessScaling\GamingWidget.LosslessScaling.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Connection\GamingWidget.ConnectionBanner.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Connection\GamingWidget.SetupWarnings.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Connection\GamingWidget.ApplyProfileTDP.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Connection\GamingWidget.PipeConnection.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Connection\GamingWidget.PipeClient.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.BackgroundEvents.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Lifecycle\GamingWidget.WidgetActivity.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Debug\GamingWidget.PawnIODebug.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Debug\GamingWidget.ViiperToggle.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Debug\GamingWidget.ViiperStickGyro.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Debug\GamingWidget.GoTweaksLighting.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Debug\GamingWidget.DebugPanel.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.TriggerTravel.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.DesktopControlsPreset.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.NintendoLayoutPreset.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Devices\GamingWidget.GpdFanCurve.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Hotkeys\GamingWidget.KeyDropdowns.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.DisplayOSDHandlers.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettingsHelpers.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.FanCurveGraph.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.TdpCustomPresets.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.TdpBoost.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.DgpToggle.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Devices\GamingWidget.GpdTabCallbacks.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Devices\GamingWidget.GpdTabEventHandlers.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.GamepadButtonRemapping.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.OSDCustomization.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.PowerSourceValues.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.SavedProfiles.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\OSD\GamingWidget.HelperMessaging.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.ControllerProfileStorage.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Controller\GamingWidget.ScrollWheelRemap.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Devices\GamingWidget.LegionGo.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\GoTweaksUpdate\GamingWidget.GoTweaksUpdate.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Hotkeys\GamingWidget.HotkeyEventHandlers.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Hotkeys\GamingWidget.HotkeysUIHandlers.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.OsPowerMode.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Other\GamingWidget.SteamGameIcons.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Labs\GamingWidget.Labs.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Performance\GamingWidget.AutoTDP.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettings.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettings.Actions.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettings.Grid.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettings.TileStates.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\QuickSettings\GamingWidget.QuickSettings.Metrics.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Features\Scale\GamingWidget.ScaleTab.cs">
+      <DependentUpon>GamingWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Converter\MegahertzStringConverter.cs" />
+    <Compile Include="GamingWidgetSettings.xaml.cs">
+      <DependentUpon>GamingWidgetSettings.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Converter\WattStringConverter.cs" />
+    <Compile Include="WidgetUIProperty.cs" />
+    <Compile Include="QuickSettings\QuickSettingsTile.cs" />
+    <Compile Include="QuickSettings\QuickSettingsConfig.cs" />
+    <Compile Include="QuickSettings\KeyboardShortcutHelper.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\LegionGo2Controller.svg" />
+    <Content Include="Assets\ButtonGlyphs\y1-left.svg" />
+    <Content Include="Assets\ButtonGlyphs\a.svg" />
+    <Content Include="Assets\ButtonGlyphs\b.svg" />
+    <Content Include="Assets\ButtonGlyphs\x.svg" />
+    <Content Include="Assets\ButtonGlyphs\y.svg" />
+    <Content Include="Assets\ButtonGlyphs\lb.svg" />
+    <Content Include="Assets\ButtonGlyphs\rb.svg" />
+    <Content Include="Assets\ButtonGlyphs\lt.svg" />
+    <Content Include="Assets\ButtonGlyphs\rt.svg" />
+    <Content Include="Assets\ButtonGlyphs\dpad-up.svg" />
+    <Content Include="Assets\ButtonGlyphs\dpad-down.svg" />
+    <Content Include="Assets\ButtonGlyphs\dpad-left.svg" />
+    <Content Include="Assets\ButtonGlyphs\dpad-right.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick-click.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick-up.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick-down.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick-left.svg" />
+    <Content Include="Assets\ButtonGlyphs\lstick-right.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick-click.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick-up.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick-down.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick-left.svg" />
+    <Content Include="Assets\ButtonGlyphs\rstick-right.svg" />
+    <Content Include="Assets\ButtonGlyphs\view.svg" />
+    <Content Include="Assets\ButtonGlyphs\menu.svg" />
+    <Content Include="Assets\ButtonGlyphs\Desktop.png" />
+    <Content Include="Assets\ButtonGlyphs\Page.png" />
+    <Content Include="Assets\ButtonGlyphs\Desktop.png" />
+    <Content Include="Assets\ButtonGlyphs\Page.png" />
+    <Content Include="Assets\ButtonGlyphs\y2-left.svg" />
+    <Content Include="Assets\ButtonGlyphs\y3-right.svg" />
+    <Content Include="Assets\ButtonGlyphs\legion.svg" />
+    <Content Include="Assets\ButtonGlyphs\qam.svg" />
+    <Content Include="Assets\ButtonGlyphs\m1.svg" />
+    <Content Include="Assets\ButtonGlyphs\m2.svg" />
+    <Content Include="Assets\ButtonGlyphs\m3.svg" />
+    <Content Include="Assets\DeviceViews\LegionGo1_Front.png" />
+    <Content Include="Assets\DeviceViews\LegionGo1_Back.png" />
+    <Content Include="Assets\DeviceViews\LegionGo1_Top.png" />
+    <Content Include="Assets\DeviceViews\LegionGo2_Front.png" />
+    <Content Include="Assets\DeviceViews\LegionGo2_Back.png" />
+    <Content Include="Assets\DeviceViews\LegionGo2_Top.png" />
+    <Content Include="Assets\DeviceViews\LegionGoS_Front.png" />
+    <Content Include="Assets\DeviceViews\LegionGoS_Back.png" />
+    <Content Include="Assets\DeviceViews\LegionGoS_Top.png" />
+    <Content Include="Assets\LegionGoSController.svg" />
+    <Content Include="Assets\LegionGo1ControllerLeft.png" />
+    <Content Include="Assets\LegionGo1ControllerRight.png" />
+    <Content Include="Assets\LegionGoSControllerLeft.png" />
+    <Content Include="Assets\LegionGoSControllerRight.png" />
+    <Content Include="Assets\LegionGo2ControllerTemplate.svg" />
+    <Content Include="Assets\LegionGo2ControllerLeft.png" />
+    <Content Include="Assets\LegionGo2ControllerRight.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-16.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-20.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-24.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-256.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-32.png" />
+    <Content Include="Assets\Icons\icon.light.targetsize-44.png" />
+    <Content Include="Assets\Icons\icon.targetsize-16.png" />
+    <Content Include="Assets\Icons\icon.targetsize-20.png" />
+    <Content Include="Assets\Icons\icon.targetsize-24.png" />
+    <Content Include="Assets\Icons\icon.targetsize-256.png" />
+    <Content Include="Assets\Icons\icon.targetsize-32.png" />
+    <Content Include="Assets\Icons\icon.targetsize-44.png" />
+    <Content Include="Assets\LargeTile.scale-100.png" />
+    <Content Include="Assets\LargeTile.scale-125.png" />
+    <Content Include="Assets\LargeTile.scale-150.png" />
+    <Content Include="Assets\LargeTile.scale-200.png" />
+    <Content Include="Assets\LargeTile.scale-400.png" />
+    <Content Include="Assets\SmallTile.scale-100.png" />
+    <Content Include="Assets\SmallTile.scale-125.png" />
+    <Content Include="Assets\SmallTile.scale-150.png" />
+    <Content Include="Assets\SmallTile.scale-200.png" />
+    <Content Include="Assets\SmallTile.scale-400.png" />
+    <Content Include="Assets\SplashScreen.scale-100.png" />
+    <Content Include="Assets\SplashScreen.scale-125.png" />
+    <Content Include="Assets\SplashScreen.scale-150.png" />
+    <Content Include="Assets\SplashScreen.scale-400.png" />
+    <Content Include="Assets\Square150x150Logo.scale-100.png" />
+    <Content Include="Assets\Square150x150Logo.scale-125.png" />
+    <Content Include="Assets\Square150x150Logo.scale-150.png" />
+    <Content Include="Assets\Square150x150Logo.scale-400.png" />
+    <Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-16.png" />
+    <Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-256.png" />
+    <Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-32.png" />
+    <Content Include="Assets\Square44x44Logo.altform-unplated_targetsize-48.png" />
+    <Content Include="Assets\Square44x44Logo.light.altform-unplated_targetsize-16.png" />
+    <Content Include="Assets\Square44x44Logo.light.altform-unplated_targetsize-256.png" />
+    <Content Include="Assets\Square44x44Logo.light.altform-unplated_targetsize-32.png" />
+    <Content Include="Assets\Square44x44Logo.light.altform-unplated_targetsize-48.png" />
+    <Content Include="Assets\Square44x44Logo.light.scale-100.png" />
+    <Content Include="Assets\Square44x44Logo.light.scale-125.png" />
+    <Content Include="Assets\Square44x44Logo.light.scale-150.png" />
+    <Content Include="Assets\Square44x44Logo.light.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.light.scale-400.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-16.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-24.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-256.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-32.png" />
+    <Content Include="Assets\Square44x44Logo.light.targetsize-48.png" />
+    <Content Include="Assets\Square44x44Logo.scale-100.png" />
+    <Content Include="Assets\Square44x44Logo.scale-125.png" />
+    <Content Include="Assets\Square44x44Logo.scale-150.png" />
+    <Content Include="Assets\Square44x44Logo.scale-400.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-16.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-16_altform-lightunplated.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-lightunplated.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-256.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-256_altform-lightunplated.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-32.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-32_altform-lightunplated.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-48.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
+    <Content Include="Assets\StoreLogo.scale-100.png" />
+    <Content Include="Assets\StoreLogo.scale-125.png" />
+    <Content Include="Assets\StoreLogo.scale-150.png" />
+    <Content Include="Assets\StoreLogo.scale-200.png" />
+    <Content Include="Assets\StoreLogo.scale-400.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-100.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-125.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-150.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-400.png" />
+    <None Include="Package.StoreAssociation.xml" />
+    <Content Include="Properties\Default.rd.xml" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Include="GamingWidget.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="GamingWidgetSettings.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Gaming.XboxGameBar">
+      <Version>7.3.2506120</Version>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform">
+      <Version>6.2.9</Version>
+    </PackageReference>
+    <PackageReference Include="Microsoft.UI.Xaml">
+      <Version>2.8.7</Version>
+    </PackageReference>
+    <PackageReference Include="NLog">
+      <Version>6.0.4</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\Shared.csproj">
+      <Project>{dab6c52a-b200-4478-925e-fa2e05169c7e}</Project>
+      <Name>Shared</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <SDKReference Include="WindowsDesktop, Version=10.0.26100.0">
+      <Name>Windows Desktop Extensions for the UWP</Name>
+    </SDKReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="NLog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup />
+  <PropertyGroup>
+    <XboxGameBar-Platform Condition="'$(Platform)' == 'x86'">win32</XboxGameBar-Platform>
+    <XboxGameBar-Platform Condition="'$(Platform)' != 'x86'">$(Platform)</XboxGameBar-Platform>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
+    <VisualStudioVersion>14.0</VisualStudioVersion>
+  </PropertyGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\WindowsXaml\v$(VisualStudioVersion)\Microsoft.Windows.UI.Xaml.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

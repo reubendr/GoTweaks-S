@@ -1,0 +1,100 @@
+name: Build GoTweaks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v2
+        with:
+          nuget-version: latest
+
+      - name: Restore NuGet packages
+        run: |
+          nuget restore XboxGamingBar.sln
+        continue-on-error: true
+
+      - name: Generate self-signed signing certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=dg" `
+            -KeyUsage DigitalSignature -FriendlyName "GoTweaks-S CI" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pwd = ConvertTo-SecureString -String "gotweaks" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx" -Password $pwd | Out-Null
+          Export-Certificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\GoTweaks-S-CI.cer" | Out-Null
+          "Thumbprint: $($cert.Thumbprint)"
+          "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build app package (Release x64)
+        shell: pwsh
+        run: |
+          $mbArgs = @(
+            'XboxGamingBarPackage\XboxGamingBarPackage.wapproj',
+            '/p:Configuration=Release',
+            '/p:Platform=x64',
+            '/p:AppxPackageDir=D:\AppPackages\',
+            '/p:AppxBundle=Never',
+            '/p:AppxPackageSigningEnabled=true',
+            "/p:PackageCertificateKeyFile=$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx",
+            '/p:PackageCertificatePassword=gotweaks',
+            "/p:PackageCertificateThumbprint=$env:CERT_THUMBPRINT",
+            '/p:UapAppxPackageBuildMode=SideloadOnly',
+            '/p:GenerateAppxPackageOnBuild=true',
+            '/restore',
+            '/m'
+          )
+          & msbuild @mbArgs 2>&1 | Tee-Object -FilePath build-full.log
+          exit $LASTEXITCODE
+
+      - name: Publish error log to ci-logs branch
+        if: failure()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build-full.log)) { "no build-full.log" | Out-File build-full.log }
+          $lines = Get-Content build-full.log
+          $errs = $lines | Select-String -Pattern 'error|Error ' | Select-Object -Last 80
+          $tail = $lines | Select-Object -Last 120
+          $out = @("=== ERROR LINES ===") + $errs + @("", "=== TAIL ===") + $tail
+          New-Item -ItemType Directory -Force -Path ci-report | Out-Null
+          $out | Out-File -FilePath ci-report/errors.txt -Encoding utf8
+          git config user.name "ci"
+          git config user.email "ci@example.com"
+          git checkout --orphan ci-logs
+          git rm -r --cached . | Out-Null
+          git add -f ci-report/errors.txt
+          git commit -m "CI error report"
+          git push -f origin ci-logs
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: GoTweaks-Release-x64
+          path: |
+            D:\AppPackages\**
+            GoTweaks-S-CI.cer
+            XboxGamingBarPackage\AppPackages\**
+          if-no-files-found: warn
