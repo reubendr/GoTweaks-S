@@ -1,4 +1,5 @@
-﻿using Shared.Enums;
+using NLog;
+using Shared.Enums;
 using XboxGamingBarHelper.Core;
 using XboxGamingBarHelper.Labs;
 
