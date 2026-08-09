@@ -59,6 +59,9 @@ jobs:
             '/p:AppxPackageDir=D:\AppPackages\',
             '/p:AppxBundle=Never',
             '/p:AppxSymbolPackageEnabled=false',
+            '/p:AppxSymbolStrippedDir=',
+            '/p:DebugSymbols=false',
+            '/p:DebugType=none',
             '/p:AppxPackageSigningEnabled=true',
             "/p:PackageCertificateKeyFile=$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx",
             '/p:PackageCertificatePassword=gotweaks',
@@ -99,3 +102,4 @@ jobs:
             GoTweaks-S-CI.cer
             XboxGamingBarPackage\AppPackages\**
           if-no-files-found: warn
+
