@@ -49,6 +49,23 @@ jobs:
           "Thumbprint: $($cert.Thumbprint)"
           "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Disable symbol packaging and clear stale PDBs
+        shell: pwsh
+        run: |
+          @'
+<Project>
+  <PropertyGroup>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <AppxGenerateSymbolPackage>False</AppxGenerateSymbolPackage>
+    <GenerateAppxSymbolPackage>False</GenerateAppxSymbolPackage>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <Target Name="_GenerateAppxSymbolPackage" />
+</Project>
+'@ | Out-File -FilePath Directory.Build.targets -Encoding utf8
+          Get-ChildItem -Recurse -Filter *.pdb -ErrorAction SilentlyContinue | ForEach-Object { "found pdb: $($_.FullName)"; Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+
       - name: Build app package (Release x64)
         shell: pwsh
         run: |
