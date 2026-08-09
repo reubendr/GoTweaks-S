@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -29,13 +30,13 @@ jobs:
 
       - name: Restore NuGet packages
         run: nuget restore XboxGamingBar.sln
-
+      
       - name: Build solution (Release x64)
         run: >
           msbuild XboxGamingBar.sln
           /p:Configuration=Release
           /p:Platform=x64
-          /p:AppxPackageDir=D:\AppPackages\
+          /p:AppxPackageDir=D:\\AppPackages\
           /p:AppxBundle=Always
           /p:UapAppxPackageBuildMode=StoreUpload
           /p:GenerateAppxPackageOnBuild=true
@@ -46,7 +47,7 @@ jobs:
         with:
           name: GoTweaks-Release-x64
           path: |
-            D:\AppPackages\**
-            XboxGamingBar\AppPackages\**
-            XboxGamingBarPackage\AppPackages\**
+            D:\\AppPackages\**
+            XboxGamingBar\\AppPackages\**
+            XboxGamingBarPackage\\AppPackages\**
           if-no-files-found: warn
