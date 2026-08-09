@@ -36,6 +36,19 @@ jobs:
           nuget restore XboxGamingBar.sln
         continue-on-error: true
 
+      - name: Generate self-signed signing certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=dg" `
+            -KeyUsage DigitalSignature -FriendlyName "GoTweaks-S CI" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pwd = ConvertTo-SecureString -String "gotweaks" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx" -Password $pwd | Out-Null
+          Export-Certificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\GoTweaks-S-CI.cer" | Out-Null
+          "Thumbprint: $($cert.Thumbprint)"
+          "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Build app package (Release x64)
         shell: pwsh
         run: |
@@ -46,6 +59,9 @@ jobs:
             '/p:AppxPackageDir=D:\AppPackages\',
             '/p:AppxBundle=Never',
             '/p:AppxPackageSigningEnabled=true',
+            "/p:PackageCertificateKeyFile=$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx",
+            '/p:PackageCertificatePassword=gotweaks',
+            "/p:PackageCertificateThumbprint=$env:CERT_THUMBPRINT",
             '/p:UapAppxPackageBuildMode=SideloadOnly',
             '/p:GenerateAppxPackageOnBuild=true',
             '/restore',
@@ -79,5 +95,6 @@ jobs:
           name: GoTweaks-Release-x64
           path: |
             D:\AppPackages\**
+            GoTweaks-S-CI.cer
             XboxGamingBarPackage\AppPackages\**
           if-no-files-found: warn
