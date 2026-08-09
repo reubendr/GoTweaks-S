@@ -97,6 +97,8 @@
 
         Settings_AutoStartRTSS,
         Settings_OnScreenDisplayProvider,
+        Settings_LegionSteamInputMode,  // bool - true = force physical XInput ON so Steam Input keeps the standard Xbox pad while GoTweaks still handles Legion L/R and back paddles
+
         Settings_UseManufacturerWMI,    // DEPRECATED: bool - use manufacturer WMI for TDP instead of RyzenAdj
         Settings_TdpMethod,             // int (TdpMethod enum) - TDP control method (ManufacturerWMI=0, PawnIO=1, WinRing0=2)
         TdpMethod_WinRing0Available,    // bool - whether WinRing0 files exist in C:\GoTweaks
