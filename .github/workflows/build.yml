@@ -58,6 +58,7 @@ jobs:
             '/p:Platform=x64',
             '/p:AppxPackageDir=D:\AppPackages\',
             '/p:AppxBundle=Never',
+            '/p:AppxSymbolPackageEnabled=false',
             '/p:AppxPackageSigningEnabled=true',
             "/p:PackageCertificateKeyFile=$env:GITHUB_WORKSPACE\XboxGamingBarPackage\XboxGamingBarPackage_TemporaryKey.pfx",
             '/p:PackageCertificatePassword=gotweaks',
