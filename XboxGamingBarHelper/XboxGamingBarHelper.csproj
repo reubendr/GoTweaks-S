@@ -761,7 +761,7 @@
     <None Include="ADLXCSharpBind.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="ADLXCSharpBind.pdb">
+    <None Include="ADLXCSharpBind.pdb" Condition="Exists('ADLXCSharpBind.pdb')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <!-- Native gyro fusion (Jibb Smart's GamepadMotionHelpers, MIT). Built from
