@@ -1635,6 +1635,8 @@ namespace XboxGamingBarHelper
                 losslessScalingManager.LosslessScalingLaunch,
                 settingsManager.AutoStartRTSS,
                 settingsManager.OnScreenDisplayProvider,
+                settingsManager.LegionSteamInputMode,
+
                 settingsManager.UseManufacturerWMI,
                 settingsManager.TdpMethod,
                 settingsManager.EmulationBackend,
