@@ -1,4 +1,6 @@
-# GoTweaks Widget
+# GoTweaks-S Widget
+
+GoTweaks-S is modified to make the Legion Go function as a steamdeck in desktop mode (same controls) with a few other changes geared towards button assignments. Works perfectly with Steam Big Picture/Xbox FSE. 
 
 A powerful Game Bar widget for controlling gaming settings with your controller. Designed for handheld gaming PCs with deep integration for Legion Go, AMD Radeon GPUs, and performance tuning.
 
@@ -258,14 +260,9 @@ Note: Other gaming software like ASUS Armoury Crate (for ROG Ally) also faces si
 
 ## Credits
 
-Original project by [namquang93](https://github.com/namquang93).
+Original project by [corando98] (https://github.com/corando98)
 
-**Special Thanks:**
-- **Mute** (Legion Go Discord) - For always being available for testing and providing valuable user feedback
-- **[GameTechPlanet](https://www.youtube.com/@GameTechPlanet)** - For the opportunity to showcase the app and covering the widget's use cases
-- **The Community** - For reporting issues and helping make this app better for everyone
-
-## Support Development
+## Support the original developer corando98
 - Donations are always appreciated, do not feel obligated to donate. Anything helps
 - [Donate](https://www.paypal.com/paypalme/corando98)
 
