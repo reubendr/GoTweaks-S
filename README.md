@@ -1,6 +1,15 @@
 # GoTweaks-S Widget
 
-GoTweaks-S is modified to make the Legion Go function as a steamdeck in desktop mode (same controls) with a few other changes geared towards button assignments. Works perfectly with Steam Big Picture/Xbox FSE. 
+GoTweaks-S Updates:
+
+    Desktop Controls: Native Steam Deck-style desktop controls—now with elevated access so controls still work in Task Manager and administrator windows (unlike Steam Input). 
+    **You can use steam desktop controls instead if you prefer but no elevated access**
+
+    Steam Input Coexistence: Helper no longer blocks Steam Input. Use Steam for main buttons and GoTweaks-S for special Legion buttons simultaneously if you prefer. 
+
+    Expanded Remapping: Full keyboard picker for remapping.
+
+    Quick Settings: Added a dedicated brightness slider.
 
 A powerful Game Bar widget for controlling gaming settings with your controller. Designed for handheld gaming PCs with deep integration for Legion Go, AMD Radeon GPUs, and performance tuning.
 
