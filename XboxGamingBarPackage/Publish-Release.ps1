@@ -30,10 +30,13 @@ function New-InstallReleaseZip {
 
         Copy-Item -Path (Join-Path $SourceDir "InstallGoTweaks.cmd") -Destination $staging -Force
         Copy-Item -Path (Join-Path $SourceDir "_install") -Destination (Join-Path $staging "_install") -Recurse -Force
-        attrib +h (Join-Path $staging "_install") | Out-Null
 
         if (Test-Path $DestinationZip) { Remove-Item $DestinationZip -Force }
-        Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $DestinationZip -Force
+        $zipItems = @(
+            (Join-Path $staging "InstallGoTweaks.cmd"),
+            (Join-Path $staging "_install")
+        )
+        Compress-Archive -Path $zipItems -DestinationPath $DestinationZip -Force
         Write-Host "Created install zip: $DestinationZip ($([math]::Round((Get-Item $DestinationZip).Length / 1MB, 1)) MB)"
     }
     finally {

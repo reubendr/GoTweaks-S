@@ -10,7 +10,7 @@ A Legion Go-focused fork of [GoTweaks](https://github.com/corando98/GoTweaks) wi
 4. Open **Xbox Game Bar** (`Win+G`) and pin the GoTweaks widget
 5. Optional: launch **GoTweaks** from Start for the full desktop app (same settings, stays in sync with the widget)
 
-> **Note:** Only **`InstallGoTweaks.cmd`** is shown at the top level. Package files live in the `_install` folder (do not delete it).
+> **Note:** Double-click **`InstallGoTweaks.cmd`** only. The `_install` folder contains the package files the installer needs — do not delete it.
 
 ---
 
