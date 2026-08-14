@@ -7,7 +7,7 @@ Desktop Controls: Native Steam Deck-style desktop controls—now with elevated a
 
 Steam Input Coexistence: Helper no longer blocks Steam Input. Use Steam for main buttons and GoTweaks-S for special Legion buttons simultaneously if you prefer. 
 
-Expanded Remapping: Full keyboard picker for remapping. Hold Legion L/R remapping. Hold L for temporary desktop controls**experimental**
+Expanded Remapping: Full keyboard picker for remapping. Hold Legion L/R remapping. Hold L for temporary desktop controls-**experimental**
 
 Quick Settings: Added a dedicated brightness slider.
 
