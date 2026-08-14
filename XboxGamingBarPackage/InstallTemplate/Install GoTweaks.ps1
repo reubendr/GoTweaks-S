@@ -86,7 +86,6 @@ function Test-RunningAsExe {
 
 #endregion
 
-$script:ScriptPath = Get-InstallerPath
 $PackageName = "PlayandBuildCustom.10365195AA1EC"
 
 # Processes that may block installation (helper copies PresentMon to LocalCache and keeps it running)
@@ -232,46 +231,66 @@ function Resolve-SigningCertificatePath {
     return $null
 }
 
+function Unblock-InstallerFiles {
+    param([string]$Dir)
+
+    $paths = @()
+    if ($script:ScriptPath) { $paths += $script:ScriptPath }
+    if ($Dir -and (Test-Path -LiteralPath $Dir)) {
+        $paths += Get-ChildItem -LiteralPath $Dir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in @('.ps1', '.cmd', '.cer', '.msixbundle') }
+    }
+
+    foreach ($item in $paths) {
+        $path = if ($item -is [string]) { $item } else { $item.FullName }
+        if ($path -and (Test-Path -LiteralPath $path)) {
+            Unblock-File -LiteralPath $path -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Request-Elevation {
     $elevateScriptPath = $script:ScriptPath
+    $workDir = Get-InstallerDirectory
 
     if (-not $elevateScriptPath) {
         Write-Err "Cannot determine installer path for elevation."
-        Write-Host "Please run this installer as Administrator manually." -ForegroundColor Yellow
-        pause
-        exit 1
+        Write-Host "Please right-click Install GoTweaks.cmd and choose Run as administrator." -ForegroundColor Yellow
+        Exit-WithPause -ExitCode 1
     }
 
-    $paramArgs = @()
-    if ($Force) { $paramArgs += "-Force" }
-    if ($SkipCertificate) { $paramArgs += "-SkipCertificate" }
-    if ($CleanInstall) { $paramArgs += "-CleanInstall" }
+    $switchArgs = @()
+    if ($Force) { $switchArgs += '-Force' }
+    if ($SkipCertificate) { $switchArgs += '-SkipCertificate' }
+    if ($CleanInstall) { $switchArgs += '-CleanInstall' }
 
     try {
         if (Test-RunningAsExe) {
-            if ($paramArgs.Count -gt 0) {
-                $proc = Start-Process -FilePath $elevateScriptPath -Verb RunAs -ArgumentList ($paramArgs -join " ") -PassThru -Wait
-            }
-            else {
-                $proc = Start-Process -FilePath $elevateScriptPath -Verb RunAs -PassThru -Wait
-            }
+            $exeArgs = @()
+            if ($switchArgs.Count -gt 0) { $exeArgs = $switchArgs }
+            $proc = Start-Process -FilePath $elevateScriptPath -Verb RunAs -WorkingDirectory $workDir `
+                -ArgumentList $exeArgs -PassThru -Wait
         }
         else {
-            $argString = "-ExecutionPolicy Bypass -File `"$elevateScriptPath`""
-            if ($paramArgs.Count -gt 0) {
-                $argString += " " + ($paramArgs -join " ")
-            }
-            $proc = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $argString -PassThru -Wait
+            # ArgumentList must be an array — a single string breaks -File and exits instantly
+            $psArgs = @(
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-NoLogo',
+                '-File', $elevateScriptPath
+            ) + $switchArgs
+
+            $proc = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WorkingDirectory $workDir `
+                -ArgumentList $psArgs -PassThru -Wait
         }
-        exit $proc.ExitCode
+
+        $exitCode = if ($null -ne $proc.ExitCode) { $proc.ExitCode } else { 1 }
+        exit $exitCode
     }
     catch {
         Write-Err "Failed to elevate to Administrator: $_"
-        Write-Host "Please right-click the installer and select 'Run as Administrator'." -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "Press any key to exit..." -ForegroundColor Gray
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        exit 1
+        Write-Host "UAC was cancelled or denied. Run Install GoTweaks.cmd again and click Yes." -ForegroundColor Yellow
+        Exit-WithPause -ExitCode 1
     }
 }
 
@@ -546,10 +565,20 @@ function Get-PackageVersion {
 
 #region Main Script
 
-Clear-Host
-
-# Get installer directory
+$script:ScriptPath = Get-InstallerPath
 $ScriptDir = Get-InstallerDirectory
+Unblock-InstallerFiles -Dir $ScriptDir
+
+# Elevate before any UI — fixes double-click launches and Run-with-PowerShell
+if (-not (Test-Administrator)) {
+    Write-Host ""
+    Write-Host "  GoTweaks S Installer" -ForegroundColor Cyan
+    Write-Host "  Requesting Administrator access (approve the UAC prompt)..." -ForegroundColor Gray
+    Write-Host ""
+    Request-Elevation
+}
+
+Clear-Host
 
 # Find main package early so we can show version
 $MainPackage = Get-ChildItem -Path $ScriptDir -Filter "*.msixbundle" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -590,14 +619,8 @@ if (-not $Force) {
     Read-Host | Out-Null
 }
 
-# Phase 1: Check Administrator
+# Phase 1: Check Administrator (elevated at script start)
 Write-Step -Step 1 -Total 6 -Message "Checking administrator privileges..."
-
-if (-not (Test-Administrator)) {
-    Write-Info "Requesting elevation to Administrator..."
-    Request-Elevation
-    exit 0
-}
 Write-Success "Running as Administrator"
 
 # Phase 2: Locate package files
