@@ -272,7 +272,7 @@ function Request-Elevation {
                 -ArgumentList $exeArgs -PassThru -Wait
         }
         else {
-            # ArgumentList must be an array — a single string breaks -File and exits instantly
+            # ArgumentList must be an array - a single string breaks -File and exits instantly
             $psArgs = @(
                 '-NoProfile',
                 '-ExecutionPolicy', 'Bypass',
@@ -569,7 +569,7 @@ $script:ScriptPath = Get-InstallerPath
 $ScriptDir = Get-InstallerDirectory
 Unblock-InstallerFiles -Dir $ScriptDir
 
-# Elevate before any UI — fixes double-click launches and Run-with-PowerShell
+# Elevate before any UI - fixes double-click launches and Run-with-PowerShell
 if (-not (Test-Administrator)) {
     Write-Host ""
     Write-Host "  GoTweaks S Installer" -ForegroundColor Cyan
@@ -643,7 +643,7 @@ if ($script:SigningCertificatePath) {
     Write-Success "Certificate: $(Split-Path $script:SigningCertificatePath -Leaf)"
 }
 else {
-    Write-Warn "No signing certificate found — sideload install will likely fail"
+    Write-Warn "No signing certificate found - sideload install will likely fail"
 }
 
 # Find dependencies - x64 only
@@ -780,7 +780,7 @@ catch {
 }
 
 if ($SkipCertificate) {
-    Write-Info "Certificate trust skipped (--SkipCertificate)"
+    Write-Info 'Certificate trust skipped (-SkipCertificate switch)'
 }
 elseif (-not $script:SigningCertificatePath) {
     Write-Err "Cannot trust package: no .cer file and could not read cert from the bundle."
@@ -862,7 +862,7 @@ while ($retryCount -lt $maxRetries -and -not $installSuccess) {
         # Registration failure: PresentMon/helper often locks LocalCache\GoTweaks\Helper\PresentMon.exe
         if (($errorMsg -match '0x80073CF6|80073CF6|0x80073D05|80073D05|could not be registered|application data') -and -not $script:RetriedRegistrationFailure) {
             $script:RetriedRegistrationFailure = $true
-            Write-Warn "Registration failed — stopping GoTweaks/PresentMon, removing stale package, clearing LocalCache..."
+            Write-Warn "Registration failed - stopping GoTweaks/PresentMon, removing stale package, clearing LocalCache..."
             try {
                 Prepare-GoTweaksForInstall -RemoveExistingPackage
                 Start-Sleep -Seconds 2
