@@ -861,8 +861,8 @@ while ($retryCount -lt $maxRetries -and -not $installSuccess) {
             Write-Host "       Troubleshooting:" -ForegroundColor Yellow
             Write-Host "       - Close Xbox Game Bar (Win+G), then end XboxGamingBarHelper + PresentMon in Task Manager" -ForegroundColor Gray
             Write-Host "       - Disable the GoTweaksHelper scheduled task (Task Scheduler -> GoTweaks folder)" -ForegroundColor Gray
-            Write-Host "       - Reboot the Legion Go, then run Install.exe -Force -CleanInstall as Admin" -ForegroundColor Gray
-            Write-Host "       - Use Install.exe, NOT Add-AppDevPackage.ps1 or double-clicking the .msixbundle" -ForegroundColor Gray
+            Write-Host "       - Reboot the Legion Go, then run Install GoTweaks.cmd -Force -CleanInstall as Admin" -ForegroundColor Gray
+            Write-Host "       - Use Install GoTweaks.cmd (or .ps1), NOT Add-AppDevPackage.ps1 or double-clicking the .msixbundle" -ForegroundColor Gray
             Write-Host "       - For details: Get-AppPackageLog | Select-Object -Last 1 | ForEach-Object { notepad `$_.FullName }" -ForegroundColor Gray
             Exit-WithPause -ExitCode 1
         }

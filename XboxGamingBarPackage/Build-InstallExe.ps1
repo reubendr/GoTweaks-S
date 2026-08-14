@@ -1,16 +1,21 @@
 <#
 .SYNOPSIS
-    Converts Install.ps1 to Install.exe using ps2exe for each generated package folder.
+    Converts Install.ps1 to package installers for each *_Test folder.
 
-.DESCRIPTION
-    This script is called after the main build to create Install.exe from Install.ps1.
-    It searches for *_Test package folders and converts the Install.ps1 in each one.
+    Always copies Install GoTweaks.ps1 + Install GoTweaks.cmd (recommended: double-click
+    the .cmd — plain PowerShell, auto-elevates, rarely flagged by Defender).
+
+    Optionally builds Install.exe via ps2exe (-BuildExe). ps2exe wrappers are often
+    reported as trojans/heuristics by Windows Defender even when harmless.
 
 .PARAMETER PackageDir
     The AppPackages directory containing the built packages.
 
 .PARAMETER IconPath
     Optional path to an ICO file for the EXE icon.
+
+.PARAMETER BuildExe
+    Also build Install.exe via ps2exe (may trigger antivirus false positives).
 
 .EXAMPLE
     .\Build-InstallExe.ps1 -PackageDir ".\AppPackages"
@@ -19,40 +24,43 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$PackageDir,
 
-    [string]$IconPath = $null
+    [string]$IconPath = $null,
+
+    [switch]$BuildExe
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "  Building Install.exe" -ForegroundColor White
+Write-Host "  Building package installers" -ForegroundColor White
+if ($BuildExe) {
+    Write-Host "  (including Install.exe via ps2exe)" -ForegroundColor Gray
+}
+else {
+    Write-Host "  (Install GoTweaks.cmd + .ps1 only; pass -BuildExe for Install.exe)" -ForegroundColor Gray
+}
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Ensure ps2exe is installed
-if (-not (Get-Module -ListAvailable -Name ps2exe)) {
-    Write-Host "Installing ps2exe module..." -ForegroundColor Yellow
-    try {
-        # Suppress all prompts for non-interactive mode
-        $ProgressPreference = 'SilentlyContinue'
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-        # Install NuGet provider if needed (required for Install-Module)
-        $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue
-
-        # Install module with all prompts suppressed
-        Install-Module -Name ps2exe -Force -Scope CurrentUser -AllowClobber -SkipPublisherCheck -ErrorAction Stop
-        Write-Host "ps2exe module installed successfully." -ForegroundColor Green
+# ps2exe only needed when building Install.exe
+if ($BuildExe) {
+    if (-not (Get-Module -ListAvailable -Name ps2exe)) {
+        Write-Host "Installing ps2exe module..." -ForegroundColor Yellow
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue
+            Install-Module -Name ps2exe -Force -Scope CurrentUser -AllowClobber -SkipPublisherCheck -ErrorAction Stop
+            Write-Host "ps2exe module installed successfully." -ForegroundColor Green
+        }
+        catch {
+            Write-Host "ERROR: Failed to install ps2exe module: $_" -ForegroundColor Red
+            exit 1
+        }
     }
-    catch {
-        Write-Host "ERROR: Failed to install ps2exe module: $_" -ForegroundColor Red
-        Write-Host "Please install manually: Install-Module -Name ps2exe -Force -Scope CurrentUser" -ForegroundColor Yellow
-        exit 1
-    }
+    Import-Module ps2exe -ErrorAction Stop
 }
-
-Import-Module ps2exe -ErrorAction Stop
 
 # Find package folders
 $packageFolders = Get-ChildItem -Path $PackageDir -Directory -Filter "*_Test" -ErrorAction SilentlyContinue
@@ -68,9 +76,14 @@ $successCount = 0
 $failCount = 0
 
 $templateScript = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.ps1"
+$templateCmd = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.cmd"
 $pfxPath = Join-Path $PSScriptRoot "XboxGamingBarPackage_TemporaryKey.pfx"
 if (-not (Test-Path $templateScript)) {
     Write-Host "ERROR: Template script not found: $templateScript" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $templateCmd)) {
+    Write-Host "ERROR: Template launcher not found: $templateCmd" -ForegroundColor Red
     exit 1
 }
 
@@ -101,6 +114,7 @@ function Export-PackageSigningCertificate {
 
 foreach ($folder in $packageFolders) {
     $scriptPath = Join-Path $folder.FullName "Install GoTweaks.ps1"
+    $cmdPath = Join-Path $folder.FullName "Install GoTweaks.cmd"
     $exePath = Join-Path $folder.FullName "Install.exe"
 
     # Copy our custom installer and overwrite MSBuild default Install.ps1
@@ -108,15 +122,24 @@ foreach ($folder in $packageFolders) {
     Write-Host "  Copying custom installer to $($folder.Name)..." -ForegroundColor Gray
     Copy-Item -Path $templateScript -Destination $scriptPath -Force
     Copy-Item -Path $templateScript -Destination (Join-Path $folder.FullName "Install.ps1") -Force
+    Copy-Item -Path $templateCmd -Destination $cmdPath -Force
     Export-PackageSigningCertificate -OutputDir $folder.FullName -PfxPath $pfxPath | Out-Null
 
-    if (-not (Test-Path $scriptPath)) {
-        Write-Host "  SKIP: $($folder.Name) - Failed to copy Install GoTweaks.ps1" -ForegroundColor Yellow
+    if (-not (Test-Path $scriptPath) -or -not (Test-Path $cmdPath)) {
+        Write-Host "  SKIP: $($folder.Name) - Failed to copy installer scripts" -ForegroundColor Yellow
+        $failCount++
+        continue
+    }
+
+    Write-Host "  SUCCESS: Install GoTweaks.cmd + Install GoTweaks.ps1" -ForegroundColor Green
+    $successCount++
+
+    if (-not $BuildExe) {
         continue
     }
 
     Write-Host ""
-    Write-Host "Converting: $($folder.Name)" -ForegroundColor Cyan
+    Write-Host "Converting: $($folder.Name) -> Install.exe" -ForegroundColor Cyan
 
     # Build ps2exe parameters
     $ps2exeParams = @{
@@ -145,7 +168,6 @@ foreach ($folder in $packageFolders) {
         if (Test-Path $exePath) {
             $exeSize = (Get-Item $exePath).Length / 1KB
             Write-Host "  SUCCESS: Created Install.exe ($([math]::Round($exeSize, 1)) KB)" -ForegroundColor Green
-            $successCount++
         }
         else {
             Write-Host "  FAIL: Install.exe was not created" -ForegroundColor Red

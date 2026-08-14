@@ -141,7 +141,7 @@
   </Target>
   <!-- Convert Install.ps1 to Install.exe after package generation -->
   <Target Name="ConvertInstallScriptToExe" AfterTargets="_GenerateAppxPackage">
-    <Message Importance="high" Text="Converting Install.ps1 to Install.exe..." />
+    <Message Importance="high" Text="Copying GoTweaks S install scripts (cmd + ps1)..." />
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\Build-InstallExe.ps1&quot; -PackageDir &quot;$(MSBuildProjectDirectory)\AppPackages&quot;" ContinueOnError="false" />
   </Target>
 </Project>
