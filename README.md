@@ -2,14 +2,18 @@
 
 GoTweaks-S Updates:
 
-    Desktop Controls: Native Steam Deck-style desktop controls—now with elevated access so controls still work in Task Manager and administrator windows (unlike Steam Input). 
-    **You can use steam desktop controls instead if you prefer but no elevated access**
+Desktop Controls: Native Steam Deck-style desktop controls—now with elevated access so controls still work in Task Manager and administrator windows (unlike Steam Input). 
+**You can use steam desktop controls instead if you prefer but no elevated access**
 
-    Steam Input Coexistence: Helper no longer blocks Steam Input. Use Steam for main buttons and GoTweaks-S for special Legion buttons simultaneously if you prefer. 
+Steam Input Coexistence: Helper no longer blocks Steam Input. Use Steam for main buttons and GoTweaks-S for special Legion buttons simultaneously if you prefer. 
 
-    Expanded Remapping: Full keyboard picker for remapping.
+Expanded Remapping: Full keyboard picker for remapping. Hold Legion L/R remapping. Hold L for temporary desktop controls**experimental**
 
-    Quick Settings: Added a dedicated brightness slider.
+Quick Settings: Added a dedicated brightness slider.
+
+
+_______________
+
 
 A powerful Game Bar widget for controlling gaming settings with your controller. Designed for handheld gaming PCs with deep integration for Legion Go, AMD Radeon GPUs, and performance tuning.
 
