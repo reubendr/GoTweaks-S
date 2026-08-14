@@ -1785,6 +1785,8 @@ namespace XboxGamingBarHelper
                 legionManager.LegionGamepadMapping,
                 // Desktop controls preset (state tracking for UI sync)
                 legionManager.LegionDesktopControls,
+                legionManager.LegionDesktopAutoDisableInGame,
+                legionManager.LegionLHoldForMouse,
                 // Controller battery properties (read-only, from HID)
                 legionManager.ControllerBatteryLeft,
                 legionManager.ControllerBatteryRight,
@@ -1849,6 +1851,8 @@ namespace XboxGamingBarHelper
 
             Logger.Info("Initialize callbacks.");
             systemManager.RunningGame.PropertyChanged += RunningGame_PropertyChanged;
+            systemManager.TrackedGame.PropertyChanged += (_, __) => HandleDesktopControlsAutoDisableOnGameChange();
+            EnsureDesktopAutoDisablePollTimer();
             systemManager.ResumeFromSleep += SystemManager_ResumeFromSleep;
             systemManager.SuspendingToSleep += SystemManager_SuspendingToSleep;
             systemManager.PowerSourceChanged += SystemManager_PowerSourceChanged;
@@ -2055,7 +2059,7 @@ namespace XboxGamingBarHelper
             // Opt-out via the System tab's "Check for updates on start"
             // checkbox — widget writes GoTweaksCheckOnStart via pipe →
             // LocalSettingsHelper → settings.json, we honour it here.
-            bool goTweaksCheckOnStart = true;
+            bool goTweaksCheckOnStart = GoTweaksUpdateConstants.CheckOnStartDefault;
             try
             {
                 if (Settings.LocalSettingsHelper.TryGetValue<bool>("GoTweaksCheckOnStart", out var gtPersisted))

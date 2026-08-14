@@ -86,6 +86,7 @@ namespace XboxGamingBar
                 LegionNintendoLayoutToggle.Toggled += LegionNintendoLayout_Toggled;
             if (LegionDesktopControlsToggle != null)
                 LegionDesktopControlsToggle.Toggled += LegionDesktopControls_Toggled;
+            WireDesktopControlsHelperSync();
             if (LegionVibrationComboBox != null)
                 LegionVibrationComboBox.SelectionChanged += ControllerSettingChanged;
             if (LegionVibrationModeComboBox != null)

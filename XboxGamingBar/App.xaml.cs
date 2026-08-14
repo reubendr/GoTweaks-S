@@ -1,10 +1,12 @@
 ﻿using Microsoft.Gaming.XboxGameBar;
 using NLog;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel.ExtendedExecution;
+using Windows.Storage;
 using Windows.Foundation.Collections;
 using Windows.UI.Core.Preview;
 using Windows.UI.ViewManagement;
@@ -79,6 +81,96 @@ namespace XboxGamingBar
             }
         }
 
+        // Game Bar widget (App) and desktop app (DesktopApp) are separate PROCESSES in the
+        // same package (see Package.appxmanifest). In-process peer notify only helps when
+        // multiple GamingWidget pages coexist in one process; cross-process sync uses
+        // ApplicationData.DataChanged plus helper Set broadcasts (see PipeClient).
+        private static readonly List<WeakReference<GamingWidget>> gamingWidgetInstances = new List<WeakReference<GamingWidget>>();
+        private static readonly object instanceRegistryLock = new object();
+
+        public static void RegisterGamingWidgetInstance(GamingWidget widget)
+        {
+            if (widget == null) return;
+
+            lock (instanceRegistryLock)
+            {
+                PruneDeadGamingWidgetInstances();
+                foreach (var weak in gamingWidgetInstances)
+                {
+                    if (weak.TryGetTarget(out var existing) && existing == widget)
+                        return;
+                }
+
+                gamingWidgetInstances.Add(new WeakReference<GamingWidget>(widget));
+                Logger.Info($"GamingWidget instance registered for peer sync (count={gamingWidgetInstances.Count})");
+            }
+        }
+
+        public static void UnregisterGamingWidgetInstance(GamingWidget widget)
+        {
+            if (widget == null) return;
+
+            lock (instanceRegistryLock)
+            {
+                gamingWidgetInstances.RemoveAll(weak => !weak.TryGetTarget(out var target) || target == widget);
+            }
+        }
+
+        private static void PruneDeadGamingWidgetInstances()
+        {
+            gamingWidgetInstances.RemoveAll(weak => !weak.TryGetTarget(out _));
+        }
+
+        public static void NotifyPeerGamingWidgetsToSync(GamingWidget source, string reason = null)
+        {
+            List<GamingWidget> peers;
+            lock (instanceRegistryLock)
+            {
+                PruneDeadGamingWidgetInstances();
+                peers = new List<GamingWidget>();
+                foreach (var weak in gamingWidgetInstances)
+                {
+                    if (weak.TryGetTarget(out var instance) && instance != source)
+                        peers.Add(instance);
+                }
+            }
+
+            if (peers.Count == 0)
+                return;
+
+            Logger.Info($"Notifying {peers.Count} peer GamingWidget instance(s) to sync ({reason ?? "shared storage changed"})");
+            foreach (var peer in peers)
+                peer.RequestSyncSharedStorageFromPeer(reason);
+        }
+
+        public static void NotifyAllGamingWidgetsToSync(string reason = null)
+        {
+            List<GamingWidget> instances;
+            lock (instanceRegistryLock)
+            {
+                PruneDeadGamingWidgetInstances();
+                instances = new List<GamingWidget>();
+                foreach (var weak in gamingWidgetInstances)
+                {
+                    if (weak.TryGetTarget(out var instance))
+                        instances.Add(instance);
+                }
+            }
+
+            if (instances.Count == 0)
+                return;
+
+            Logger.Info($"Notifying {instances.Count} GamingWidget instance(s) to sync ({reason ?? "shared storage changed"})");
+            foreach (var instance in instances)
+                instance.RequestSyncSharedStorageFromPeer(reason);
+        }
+
+        private static void ApplicationData_DataChanged(ApplicationData sender, object args)
+        {
+            Logger.Info("ApplicationData.DataChanged — sibling app in package modified shared storage");
+            NotifyAllGamingWidgetsToSync("ApplicationData.DataChanged");
+        }
+
         private XboxGameBarWidget gamingXboxGameBarWidget = null;
         private XboxGameBarWidget gamingSettingsXboxGameBarWidget = null;
         private GamingWidget gamingWidget = null;
@@ -123,6 +215,17 @@ namespace XboxGamingBar
             this.Suspending += OnSuspending;
             this.EnteredBackground += App_EnteredBackground;
             this.LeavingBackground += App_LeavingBackground;
+
+            // Widget process + desktop process share LocalSettings (same package). When either
+            // saves remaps, the sibling process receives DataChanged and reloads its UI.
+            try
+            {
+                ApplicationData.Current.DataChanged += ApplicationData_DataChanged;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ApplicationData.DataChanged registration failed: {ex.Message}");
+            }
             //var installedLocation = Windows.ApplicationModel.Package.Current.InstalledLocation.Path;
             //var localFolder = ApplicationData.Current.LocalFolder.Path;
             //var localCache = ApplicationData.Current.LocalCacheFolder.Path;
@@ -485,6 +588,10 @@ namespace XboxGamingBar
                         Logger.Warn($"ShowAppWindow request on launch failed: {ex.Message}");
                     }
                 }
+
+                // Tray/Start relaunch does not re-run OnNavigatedTo on the existing desktop
+                // instance — reload remaps from LocalSettings now that the window is back.
+                NotifyAllGamingWidgetsToSync("desktop show");
 
                 // #94: with the confirmAppClose capability, X on this desktop
                 // window raises CloseRequested instead of terminating outright.

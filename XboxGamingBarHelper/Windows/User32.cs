@@ -87,6 +87,9 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
         private const int SW_SHOW = 5;
         private const int SW_MINIMIZE = 6;
         private const int SW_RESTORE = 9;
@@ -162,6 +165,86 @@ namespace XboxGamingBarHelper.Windows
 
             ShowWindow(hWnd, IsIconic(hWnd) ? SW_RESTORE : SW_SHOW);
             SetForegroundWindow(hWnd);
+            return true;
+        }
+
+        /// <summary>
+        /// True when the standalone GoTweaks desktop window (ApplicationFrameHost)
+        /// or one of its child HWNDs currently has foreground focus.
+        /// </summary>
+        public static bool IsGoTweaksDesktopWindowForeground()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+
+            IntPtr goTweaksFrame = FindAppFrameWindow("GoTweaks", visibleOnly: true);
+            if (goTweaksFrame == IntPtr.Zero) return false;
+
+            if (fg == goTweaksFrame) return true;
+
+            IntPtr walk = fg;
+            while (walk != IntPtr.Zero)
+            {
+                if (walk == goTweaksFrame) return true;
+                walk = GetParent(walk);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Brings a visible Steam client window to the foreground so BPM chords (Ctrl+1/2)
+        /// reach Steam instead of the app that had focus. Returns false if none found.
+        /// </summary>
+        public static bool TryFocusSteamClientWindow()
+        {
+            IntPtr found = IntPtr.Zero;
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsWindowVisible(hWnd)) return true;
+
+                int pid = GetWindowProcessId(hWnd);
+                if (pid <= 0) return true;
+
+                try
+                {
+                    using var process = Process.GetProcessById(pid);
+                    if (!string.Equals(process.ProcessName, "steam", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch
+                {
+                    return true;
+                }
+
+                var classBuf = new StringBuilder(64);
+                if (GetClassName(hWnd, classBuf, classBuf.Capacity) == 0) return true;
+                string className = classBuf.ToString();
+
+                // Steam BPM / overlay surfaces are SDL or Chromium host windows.
+                if (className.IndexOf("SDL", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    className.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase))
+                {
+                    found = hWnd;
+                    return false;
+                }
+
+                // Fallback: any top-level Steam window with a title.
+                int len = GetWindowTextLength(hWnd);
+                if (len > 0)
+                {
+                    found = hWnd;
+                    return false;
+                }
+
+                return true;
+            }, 0);
+
+            if (found == IntPtr.Zero) return false;
+
+            ShowWindow(found, IsIconic(found) ? SW_RESTORE : SW_SHOW);
+            SetForegroundWindow(found);
             return true;
         }
 
@@ -451,6 +534,99 @@ namespace XboxGamingBarHelper.Windows
             catch { /* process may have exited */ }
 
             return pid;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct PROCESSENTRY32
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szExeFile;
+        }
+
+        private const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool Process32First(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool Process32Next(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+        /// <summary>Returns the parent PID for <paramref name="processId"/>, or 0 if unknown.</summary>
+        public static int TryGetParentProcessId(int processId)
+        {
+            if (processId <= 0) return 0;
+
+            IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1))
+                return 0;
+
+            try
+            {
+                var entry = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32)) };
+                if (!Process32First(snapshot, ref entry))
+                    return 0;
+
+                do
+                {
+                    if (entry.th32ProcessID == (uint)processId)
+                        return (int)entry.th32ParentProcessID;
+                }
+                while (Process32Next(snapshot, ref entry));
+            }
+            finally
+            {
+                CloseHandle(snapshot);
+            }
+
+            return 0;
+        }
+
+        /// <summary>True if any ancestor process matches <paramref name="processName"/> (without .exe).</summary>
+        public static bool HasProcessAncestorNamed(int processId, string processName, int maxDepth = 8)
+        {
+            if (processId <= 0 || string.IsNullOrWhiteSpace(processName))
+                return false;
+
+            string target = processName.Trim();
+            if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                target = target.Substring(0, target.Length - 4);
+
+            int current = processId;
+            for (int depth = 0; depth < maxDepth; depth++)
+            {
+                int parentId = TryGetParentProcessId(current);
+                if (parentId <= 0 || parentId == current)
+                    return false;
+
+                try
+                {
+                    using (var parent = Process.GetProcessById(parentId))
+                    {
+                        if (string.Equals(parent.ProcessName, target, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+
+                current = parentId;
+            }
+
+            return false;
         }
 
         public static void GetOpenWindows(IDictionary<int, ProcessWindow> windows)
@@ -921,6 +1097,33 @@ namespace XboxGamingBarHelper.Windows
         [DllImport("user32.dll", SetLastError = true)]
         static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+        [DllImport("user32.dll")]
+        private static extern int ShowCursor(bool bShow);
+
+        private static int holdMouseCursorBoostCount;
+
+        /// <summary>
+        /// Counteracts apps/games that hide the OS cursor (ShowCursor count &lt; 0).
+        /// Each call should be paired with <see cref="ReleaseHoldMouseCursorBoost"/>.
+        /// </summary>
+        public static void BoostHoldMouseCursorVisibility(int extraShowCalls = 2)
+        {
+            for (int i = 0; i < extraShowCalls; i++)
+            {
+                ShowCursor(true);
+                holdMouseCursorBoostCount++;
+            }
+        }
+
+        public static void ReleaseHoldMouseCursorBoost()
+        {
+            while (holdMouseCursorBoostCount > 0)
+            {
+                ShowCursor(false);
+                holdMouseCursorBoostCount--;
+            }
+        }
+
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_KEYUP = 0x0002;
 
@@ -1172,19 +1375,28 @@ namespace XboxGamingBarHelper.Windows
                     return false;
                 }
 
-                // Press modifiers
+                // Press modifiers, hold, then main keys — Steam BPM and similar apps
+                // need the modifier down before the chord key, not simultaneous.
+                const int modifierHoldMs = 100;
+                const int keyHoldMs = 50;
+
                 foreach (var mod in modifiers)
                 {
                     SendSingleKey((ushort)mod, false);
                     Sleep(10);
                 }
 
-                // Press all main keys
+                if (modifiers.Count > 0 && mainKeys.Count > 0)
+                    Sleep(modifierHoldMs);
+
                 foreach (var key in mainKeys)
                 {
                     SendSingleKey((ushort)key, false);
                     Sleep(10);
                 }
+
+                if (mainKeys.Count > 0)
+                    Sleep(keyHoldMs);
 
                 // Release all main keys in reverse order
                 for (int i = mainKeys.Count - 1; i >= 0; i--)
@@ -1192,6 +1404,9 @@ namespace XboxGamingBarHelper.Windows
                     SendSingleKey((ushort)mainKeys[i], true);
                     Sleep(10);
                 }
+
+                if (mainKeys.Count > 0 && modifiers.Count > 0)
+                    Sleep(keyHoldMs);
 
                 // Release modifiers in reverse order
                 for (int i = modifiers.Count - 1; i >= 0; i--)

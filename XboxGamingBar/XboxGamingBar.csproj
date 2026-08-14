@@ -214,6 +214,8 @@
     <Compile Include="Data\Legion\LegionButtonPageProperty.cs" />
     <Compile Include="Data\Legion\LegionNintendoLayoutProperty.cs" />
     <Compile Include="Data\Legion\LegionDesktopControlsProperty.cs" />
+    <Compile Include="Data\Legion\LegionDesktopAutoDisableInGameProperty.cs" />
+    <Compile Include="Data\Legion\LegionLHoldForMouseProperty.cs" />
     <Compile Include="Data\Legion\LegionVibrationModeProperty.cs" />
     <Compile Include="Data\Legion\LegionControllerProfileProperty.cs" />
     <Compile Include="Data\Legion\LegionGyroTargetProperty.cs" />

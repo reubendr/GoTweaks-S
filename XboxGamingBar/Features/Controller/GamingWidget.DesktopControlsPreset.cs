@@ -73,6 +73,23 @@ namespace XboxGamingBar
             // matches isDesktopModeActive.
             bool enabled = LegionDesktopControlsToggle?.IsOn ?? false;
             ApplyDesktopModeState(enabled, persistActive: true);
+            SyncDesktopJoystickMouseMode(enabled);
+        }
+
+        /// <summary>
+        /// Desktop Controls always uses RS-as-mouse (mode 2). Keeps the hidden combo and helper
+        /// property aligned — the standalone Joystick-as-Mouse picker was removed from the UI.
+        /// </summary>
+        private void SyncDesktopJoystickMouseMode(bool desktopEnabled)
+        {
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || legionJoystickAsMouseMode == null)
+                return;
+
+            // Desktop Controls owns RS-as-mouse via the admin trackball path. When toggled
+            // off, ApplyDesktopModeState restores the underlying profile's joystick mode —
+            // do NOT keep RS mouse latched here (Hold L is session-only, not a permanent mode).
+            if (desktopEnabled && legionJoystickAsMouseMode.Value != 2)
+                legionJoystickAsMouseMode.SetValue(2);
         }
 
         /// <summary>
@@ -84,6 +101,10 @@ namespace XboxGamingBar
         {
             try
             {
+                // Helper auto-disable pushes the toggle off while a game runs — never re-apply overlay.
+                if (enabled && !(LegionDesktopControlsToggle?.IsOn ?? false))
+                    return;
+
                 var settings = Windows.Storage.ApplicationData.Current.LocalSettings;
 
                 // Heal the legacy-storage state before deciding whether to seed.
@@ -119,6 +140,8 @@ namespace XboxGamingBar
                     if (persistActive) settings.Values[DesktopModeActiveKey] = true;
                     UpdateButtonRemappingOverlayHint();
                     Logger.Info($"Desktop Mode enabled (overlay applied, underlying={_desktopUnderlyingProfileName})");
+                    if (persistActive)
+                        App.NotifyPeerGamingWidgetsToSync(this, "desktop mode enabled");
                 }
                 else if (!enabled && isDesktopModeActive)
                 {
@@ -136,6 +159,8 @@ namespace XboxGamingBar
                     if (persistActive) settings.Values[DesktopModeActiveKey] = false;
                     UpdateButtonRemappingOverlayHint();
                     Logger.Info($"Desktop Mode disabled (restored {_desktopUnderlyingProfileName})");
+                    if (persistActive)
+                        App.NotifyPeerGamingWidgetsToSync(this, "desktop mode disabled");
                 }
             }
             catch (Exception ex)
@@ -239,25 +264,49 @@ namespace XboxGamingBar
             }
         }
 
-        /// <summary>The built-in Desktop Mode default: DPAD/LS→arrows, LSClick→Win, A→Enter, B→Esc, LB→LClick, LT→RClick.</summary>
+        /// <summary>Steam Input desktop companion: RS=mouse, LS=scroll, LT=RClick, RT=LClick, etc.</summary>
         private Dictionary<string, ButtonMapping> BuildDesktopPresetMappings()
         {
-            // HID key codes: Up=0x52, Down=0x51, Left=0x50, Right=0x4F, Enter=0x28, Escape=0x29, LeftGUI(Win)=0xE3.
-            // LB/LT used for clicks to avoid the firmware drag-drop bug with triggers.
-            // MouseButton: 0=Left, 1=Right, 2=Middle, 3=ScrollUp, 4=ScrollDown.
+            // D-Pad and A left disabled (Type=0) — Steam Input desktop owns face buttons.
+            // HID key codes: Enter=0x28, Esc=0x29, Tab=0x2B, Win=0xE3, LeftAlt=0xE2.
+            // Mouse clicks (LT/RT) are injected helper-side when Desktop Controls is active.
             return new Dictionary<string, ButtonMapping>
             {
-                ["DPadUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } },
-                ["DPadDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } },
-                ["DPadLeft"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x50 } },
-                ["DPadRight"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x4F } },
-                ["LSUp"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x52 } },
-                ["LSDown"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x51 } },
+                ["DPadUp"] = new ButtonMapping { Type = 0 },
+                ["DPadDown"] = new ButtonMapping { Type = 0 },
+                ["DPadLeft"] = new ButtonMapping { Type = 0 },
+                ["DPadRight"] = new ButtonMapping { Type = 0 },
                 ["LSClick"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0xE3 } },
-                ["A"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x28 } },
+                ["A"] = new ButtonMapping { Type = 0 },
                 ["B"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x29 } },
-                ["LB"] = new ButtonMapping { Type = 2, MouseButton = 0 },
+                ["X"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x28 } },
+                ["Y"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0x2B } },
+                ["LB"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0xE2, 0x50 } },
+                ["RB"] = new ButtonMapping { Type = 1, KeyboardKeys = new List<int> { 0xE2, 0x4F } },
                 ["LT"] = new ButtonMapping { Type = 2, MouseButton = 1 },
+                ["RT"] = new ButtonMapping { Type = 2, MouseButton = 0 },
+            };
+        }
+
+        /// <summary>Keep widget desktop overlay in sync when helper auto-disables for games.</summary>
+        private void WireDesktopControlsHelperSync()
+        {
+            legionDesktopControls.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != "Value") return;
+                if (isLoadingControllerProfile || isSwitchingControllerProfile) return;
+
+                try
+                {
+                    if (!legionDesktopControls.Value && isDesktopModeActive)
+                        ApplyDesktopModeState(false, persistActive: false);
+                    else if (legionDesktopControls.Value && !isDesktopModeActive)
+                        ApplyDesktopModeState(true, persistActive: false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"WireDesktopControlsHelperSync: {ex.Message}");
+                }
             };
         }
 

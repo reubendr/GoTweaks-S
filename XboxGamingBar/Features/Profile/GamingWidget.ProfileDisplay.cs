@@ -37,6 +37,7 @@ using XboxGamingBar.Data;
 using XboxGamingBar.Event;
 using XboxGamingBar.IPC;
 using XboxGamingBar.QuickSettings;
+using Shared.Constants;
 using Shared.Enums;
 
 namespace XboxGamingBar
@@ -357,14 +358,7 @@ namespace XboxGamingBar
 
         private static string GetOverlayLevelShortName(int level)
         {
-            switch (level)
-            {
-                case 0: return "Off";
-                case 1: return "Basic";
-                case 2: return "Detailed";
-                case 3: return "Full";
-                default: return "Off";
-            }
+            return OverlayLevels.GetShortName(level);
         }
 
         private static string GetLegionModeShortName(int mode)

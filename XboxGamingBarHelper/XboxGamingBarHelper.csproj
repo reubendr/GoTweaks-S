@@ -530,6 +530,8 @@
     <Compile Include="Startup\Program.LegionControllerHandlers.cs" />
     <Compile Include="Startup\Program.PowerSourceHandler.cs" />
     <Compile Include="Startup\Program.HotkeyHandlers.cs" />
+    <Compile Include="Startup\Program.DesktopAdminMouse.cs" />
+    <Compile Include="Startup\Program.LegionLHoldMouse.cs" />
     <Compile Include="Startup\Program.Labs.cs" />
     <Compile Include="Startup\Program.ScreenSaver.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -1,4 +1,5 @@
 using NLog;
+using Shared.Input;
 using Shared.Data;
 using Shared.Enums;
 using System;
@@ -22,6 +23,17 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         public void SetJoystickAsMouseMode(int mode)
         {
             joystickAsMouseMode = mode;
+
+            if (LegionDesktopControls?.Value == true)
+            {
+                // Desktop Controls uses elevated helper-side injection for cursor/scroll.
+                ApplyJoystickAsMouse(true, false, joystickMouseSens);
+                ApplyJoystickAsMouse(false, false, joystickMouseSens);
+                Program.StartDesktopAdminMouse(mode, joystickMouseSens);
+                return;
+            }
+
+            Program.StopDesktopAdminMouse();
 
             // Always disable every stick that should be off instead of trusting the
             // tracked previous mode: the firmware keeps mouse mode across helper
@@ -68,6 +80,11 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         public void SetJoystickMouseSens(int sensitivity)
         {
             joystickMouseSens = sensitivity;
+            if (LegionDesktopControls?.Value == true)
+            {
+                Program.StartDesktopAdminMouse(joystickAsMouseMode, joystickMouseSens);
+                return;
+            }
             // Only apply if a joystick is active
             if (joystickAsMouseMode == 1)
             {
@@ -126,6 +143,168 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             new System.Collections.Generic.Dictionary<Labs.LegionInputButton, int>();
         private readonly System.Collections.Generic.Dictionary<Labs.LegionInputButton, int> scrollRepeatRemaps =
             new System.Collections.Generic.Dictionary<Labs.LegionInputButton, int>();
+        private readonly System.Collections.Generic.Dictionary<Labs.LegionInputButton, int> mouseClickRemaps =
+            new System.Collections.Generic.Dictionary<Labs.LegionInputButton, int>();
+
+        internal void ClearHelperSideMouseClickMappings()
+        {
+            lock (helperSideMappingLock) { mouseClickRemaps.Clear(); }
+        }
+
+        internal void SetHelperSideMouseClickMapping(Labs.LegionInputButton button, int mouseButton)
+        {
+            lock (helperSideMappingLock) { mouseClickRemaps[button] = mouseButton; }
+            Logger.Info($"Helper-side mouse click for {button}: button={mouseButton}");
+        }
+
+        internal bool TryGetMouseClickRemap(Labs.LegionInputButton button, out int mouseButton)
+        {
+            lock (helperSideMappingLock) { return mouseClickRemaps.TryGetValue(button, out mouseButton); }
+        }
+
+        internal static Labs.LegionInputButton? EdgeButtonForGamepadButton(GamepadButton button)
+        {
+            switch (button)
+            {
+                case GamepadButton.A: return Labs.LegionInputButton.A;
+                case GamepadButton.B: return Labs.LegionInputButton.B;
+                case GamepadButton.X: return Labs.LegionInputButton.X;
+                case GamepadButton.Y: return Labs.LegionInputButton.Y;
+                case GamepadButton.LT: return Labs.LegionInputButton.LeftTrigger;
+                case GamepadButton.RT: return Labs.LegionInputButton.RightTrigger;
+                case GamepadButton.LB: return Labs.LegionInputButton.LeftShoulder;
+                case GamepadButton.RB: return Labs.LegionInputButton.RightShoulder;
+                case GamepadButton.LSClick: return Labs.LegionInputButton.LeftThumb;
+                case GamepadButton.RSClick: return Labs.LegionInputButton.RightThumb;
+                case GamepadButton.DPadUp: return Labs.LegionInputButton.DpadUp;
+                case GamepadButton.DPadDown: return Labs.LegionInputButton.DpadDown;
+                case GamepadButton.DPadLeft: return Labs.LegionInputButton.DpadLeft;
+                case GamepadButton.DPadRight: return Labs.LegionInputButton.DpadRight;
+                case GamepadButton.Start: return Labs.LegionInputButton.Start;
+                case GamepadButton.Select: return Labs.LegionInputButton.Back;
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Hard off-switch for Desktop Controls when a game is running. Must disable firmware
+        /// sticks and helper injection even if LegionDesktopControls was already false.
+        /// </summary>
+        public void ForceSuspendDesktopControlsForGame()
+        {
+            // Hold-for-mouse is an intentional in-game overlay — don't tear it down when
+            // auto-disable re-asserts every poll tick.
+            if (Program.IsLegionLHoldMouseActive())
+                return;
+
+            Program.StopDesktopAdminMouse();
+            ClearHelperSideMouseClickMappings();
+            joystickAsMouseMode = 0;
+
+            ApplyJoystickAsMouse(true, false, joystickMouseSens);
+            ApplyJoystickAsMouse(false, false, joystickMouseSens);
+
+            // Reset mappings before clearing the flag so OnDesktopControlsChanged sees disable JSON.
+            LegionGamepadMapping.ForceSetValue(DesktopControlsPreset.DisableMappingsJson);
+            if (LegionDesktopControls.Value)
+                LegionDesktopControls.ForceSetValue(false);
+            else
+                OnDesktopControlsChanged(false);
+
+            LegionJoystickAsMouseMode.ForceSetValue(0);
+
+            ApplyJoystickAsMouse(true, false, joystickMouseSens);
+            ApplyJoystickAsMouse(false, false, joystickMouseSens);
+            Logger.Info("ForceSuspendDesktopControlsForGame: desktop controls fully suspended");
+        }
+
+        public void ForceRestoreDesktopControlsAfterGame()
+        {
+            LegionJoystickAsMouseMode.ForceSetValue(2);
+            LegionGamepadMapping.ForceSetValue(DesktopControlsPreset.EnableMappingsJson);
+            LegionDesktopControls.ForceSetValue(true);
+            ReapplyLegionSteamFirmwareMappings();
+            Logger.Info("ForceRestoreDesktopControlsAfterGame: desktop controls restored");
+        }
+
+        /// <summary>
+        /// SteamOS-style hold Legion L: apply desktop mouse layout without toggling
+        /// the Desktop Controls property (works in games with desktop controls off).
+        /// </summary>
+        public void ApplyHoldMouseOverlay(bool desktopAlreadyOn)
+        {
+            SuppressFrontButtonFirmwareForHoldMouse();
+            ApplyJoystickAsMouse(true, false, joystickMouseSens);
+            ApplyJoystickAsMouse(false, false, joystickMouseSens);
+
+            if (!desktopAlreadyOn)
+            {
+                ApplyGamepadButtonMappings(DesktopControlsPreset.EnableMappingsJson, forceHelperSideMouse: true);
+                try { ControllerEmulation.Viiper.ViiperEmulationManager.SetDesktopControlsActive(true); }
+                catch (Exception ex) { Logger.Warn($"Hold-mouse emu neutralize threw: {ex.Message}"); }
+            }
+        }
+
+        /// <summary>Restore mappings after a hold-for-mouse session ends.</summary>
+        public void RestoreAfterHoldMouseOverlay(bool desktopWasOn, string savedMappingJson, int savedJoystickMode)
+        {
+            RestoreFrontButtonFirmwareAfterHoldMouse();
+
+            if (desktopWasOn) return;
+
+            ClearHelperSideMouseClickMappings();
+            ApplyGamepadButtonMappings(string.IsNullOrEmpty(savedMappingJson)
+                ? DesktopControlsPreset.DisableMappingsJson
+                : savedMappingJson);
+            SetJoystickAsMouseMode(savedJoystickMode);
+            try { ControllerEmulation.Viiper.ViiperEmulationManager.SetDesktopControlsActive(false); }
+            catch (Exception ex) { Logger.Warn($"Hold-mouse emu restore threw: {ex.Message}"); }
+        }
+
+        public void OnLegionLHoldForMouseChanged(bool enabled)
+        {
+            try
+            {
+                Settings.LocalSettingsHelper.SetValue("LegionL_HoldForMouse", enabled);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Failed to persist LegionL_HoldForMouse: {ex.Message}");
+            }
+
+            Labs.LegionButtonMonitor.Current?.ConfigureLegionLHoldForMouse(enabled);
+            if (enabled)
+            {
+                Labs.LegionButtonMonitor.Current?.ConfigureButtonLongPress("L", false, 0, "");
+                if (Program.IsLegionLHoldMouseActive())
+                    Program.EndLegionLHoldMouseSession();
+            }
+        }
+
+        /// <summary>
+        /// Called when Desktop Controls is toggled. Re-applies mappings through the admin or
+        /// firmware path and starts/stops the elevated mouse poll loop.
+        /// </summary>
+        public void OnDesktopControlsChanged(bool enabled)
+        {
+            if (enabled)
+            {
+                ApplyGamepadButtonMappings(LegionGamepadMapping.Value);
+                SetJoystickAsMouseMode(2);
+            }
+            else
+            {
+                Program.StopDesktopAdminMouse();
+                ClearHelperSideMouseClickMappings();
+
+                ApplyGamepadButtonMappings(LegionGamepadMapping.Value);
+
+                // Force off immediately; widget profile restore will re-send the saved
+                // Global/per-game JoystickAsMouseMode if the user had legacy firmware mouse on.
+                joystickAsMouseMode = 0;
+                SetJoystickAsMouseMode(0);
+            }
+        }
 
         internal void SetHelperSideButtonMapping(Labs.LegionInputButton button, int? systemAction, int? scrollCode)
         {
@@ -172,13 +351,17 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         /// Applies gamepad button mappings from JSON.
         /// JSON format: {"LSClick":{"Type":1,"GamepadAction":3,"KeyboardKeys":[],"MouseButton":0},...}
         /// </summary>
-        public void ApplyGamepadButtonMappings(string json)
+        public void ApplyGamepadButtonMappings(string json, bool forceHelperSideMouse = false)
         {
             if (string.IsNullOrEmpty(json))
             {
                 Logger.Debug("No gamepad button mappings to apply");
                 return;
             }
+
+            bool desktopAdminMouse = forceHelperSideMouse || (LegionDesktopControls?.Value == true);
+            if (desktopAdminMouse)
+                ClearHelperSideMouseClickMappings();
 
             try
             {
@@ -207,6 +390,19 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
                     // Parse the mapping using existing ButtonMappingParser
                     var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(mappingJson);
+
+                    // Desktop Controls: mouse clicks are injected helper-side (elevated InputInjector)
+                    // so they work in admin windows. Clear firmware mapping for those buttons.
+                    if (desktopAdminMouse && type == 2 && mouseButton >= 0 && mouseButton <= 2)
+                    {
+                        var edgeButton = EdgeButtonForGamepadButton(button);
+                        controller.ClearGamepadButtonMapping(button);
+                        System.Threading.Thread.Sleep(HID_COMMAND_DELAY_MS);
+                        if (edgeButton.HasValue)
+                            SetHelperSideMouseClickMapping(edgeButton.Value, mouseButton);
+                        Logger.Info($"Applied helper-side desktop mouse for {buttonName}: mouseButton={mouseButton}");
+                        continue;
+                    }
 
                     // Apply the mapping
                     if (type == 0 && gamepadAction == 0)
@@ -259,6 +455,66 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             {
                 Logger.Error($"Error applying gamepad button mappings: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// While Legion L is held for mouse mode, silence stock Desktop/Page firmware
+        /// shortcuts (Win+D / Win+Tab) that would otherwise fire for the whole hold.
+        /// </summary>
+        public void SuppressFrontButtonFirmwareForHoldMouse()
+        {
+            try
+            {
+                using var controller = new LegionGoController();
+                if (!controller.Connect())
+                {
+                    Logger.Warn("Hold-mouse: cannot suppress front buttons — controller not connected");
+                    return;
+                }
+
+                controller.DisableGamepadButtonMapping(GamepadButton.DesktopButton);
+                System.Threading.Thread.Sleep(HID_COMMAND_DELAY_MS);
+                controller.DisableGamepadButtonMapping(GamepadButton.PageButton);
+                Logger.Info("Hold-mouse: suppressed Desktop/Page firmware shortcuts");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SuppressFrontButtonFirmwareForHoldMouse failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>Restore Desktop/Page firmware after a hold-for-mouse session.</summary>
+        public void RestoreFrontButtonFirmwareAfterHoldMouse()
+        {
+            try
+            {
+                RestoreSingleFrontButtonMapping(LegionButtonDesktop?.Value, GamepadButton.DesktopButton);
+                System.Threading.Thread.Sleep(HID_COMMAND_DELAY_MS);
+                RestoreSingleFrontButtonMapping(LegionButtonPage?.Value, GamepadButton.PageButton);
+                ReapplyLegionSteamFirmwareMappings();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"RestoreFrontButtonFirmwareAfterHoldMouse failed: {ex.Message}");
+            }
+        }
+
+        private void RestoreSingleFrontButtonMapping(string mappingJson, GamepadButton button)
+        {
+            if (!string.IsNullOrEmpty(mappingJson))
+            {
+                var (type, gamepadAction, keyboardKeys, mouseButton) = ButtonMappingParser.Parse(mappingJson);
+                SetLegionButtonMapping(
+                    button,
+                    type,
+                    ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton),
+                    out _);
+                return;
+            }
+
+            using var controller = new LegionGoController();
+            if (!controller.Connect()) return;
+            controller.SetGamepadButtonMappingAdvanced(button, MappingType.Gamepad, new byte[] { (byte)button });
         }
 
     }

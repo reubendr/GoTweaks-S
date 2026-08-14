@@ -84,9 +84,16 @@ namespace XboxGamingBar
             // Stop reconnection timeout timer
             StopReconnectionTimeoutTimer();
 
+            if (sharedStorageSyncDebounceTimer != null)
+            {
+                sharedStorageSyncDebounceTimer.Stop();
+                sharedStorageSyncDebounceTimer = null;
+            }
+
             // Unregister this instance as the active widget
             Logger.Info("Unregistering this GamingWidget instance as the active widget.");
             App.UnregisterActiveGamingWidget(this);
+            App.UnregisterGamingWidgetInstance(this);
             Logger.Info("GamingWidget instance unregistered.");
 
             // Detach this instance's pipe handlers. The active-instance guards inside those

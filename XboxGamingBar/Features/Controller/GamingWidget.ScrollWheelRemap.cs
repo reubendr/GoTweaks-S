@@ -110,6 +110,8 @@ namespace XboxGamingBar
 
         private void SaveScrollRemapSettings()
         {
+            if (isReloadingSharedStorage) return;
+
             try
             {
                 var settings = ApplicationData.Current.LocalSettings;
@@ -139,6 +141,8 @@ namespace XboxGamingBar
                 });
 
                 Logger.Info("Scroll wheel remap settings saved");
+
+                App.NotifyPeerGamingWidgetsToSync(this, "scroll remap");
             }
             catch (Exception ex)
             {
@@ -195,15 +199,18 @@ namespace XboxGamingBar
                 string clickShortcutLoaded = GetKeysAsString("ScrollClick");
                 string clickCommandLoaded = ScrollClickCommandTextBox?.Text ?? "";
 
-                SaveToFallbackSettingsFile(new Dictionary<string, object>
+                if (!isReloadingSharedStorage)
                 {
-                    { "Scroll_Action", scrollActionLoaded },
-                    { "Scroll_Shortcut", scrollShortcutLoaded },
-                    { "Scroll_Command", scrollCommandLoaded },
-                    { "ScrollClick_Action", clickActionLoaded },
-                    { "ScrollClick_Shortcut", clickShortcutLoaded },
-                    { "ScrollClick_Command", clickCommandLoaded }
-                });
+                    SaveToFallbackSettingsFile(new Dictionary<string, object>
+                    {
+                        { "Scroll_Action", scrollActionLoaded },
+                        { "Scroll_Shortcut", scrollShortcutLoaded },
+                        { "Scroll_Command", scrollCommandLoaded },
+                        { "ScrollClick_Action", clickActionLoaded },
+                        { "ScrollClick_Shortcut", clickShortcutLoaded },
+                        { "ScrollClick_Command", clickCommandLoaded }
+                    });
+                }
 
                 Logger.Info("Scroll wheel remap settings loaded");
             }

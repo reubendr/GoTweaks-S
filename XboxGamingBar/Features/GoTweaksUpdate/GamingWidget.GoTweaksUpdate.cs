@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Shared.Constants;
+using System;
 using System.Threading.Tasks;
 using Windows.Data.Json;
 using Windows.Foundation.Collections;
@@ -63,9 +64,7 @@ namespace XboxGamingBar
 
         private bool GoTweaksCheckOnStart
         {
-            // Default true: users who haven't opted out expect the banner
-            // to appear on launch when an update exists.
-            get => GetBoolSetting(GoTweaksCheckOnStartKey, true);
+            get => GetBoolSetting(GoTweaksCheckOnStartKey, GoTweaksUpdateConstants.CheckOnStartDefault);
             set => SetBoolSetting(GoTweaksCheckOnStartKey, value);
         }
         private bool GoTweaksHideBanner

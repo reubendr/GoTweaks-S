@@ -1,6 +1,7 @@
 ﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
+using Shared.Input;
 using Shared.IPC;
 using System;
 using System.Collections.Generic;
@@ -30,6 +31,7 @@ using XboxGamingBarHelper.Profile;
 using XboxGamingBarHelper.RTSS;
 using XboxGamingBarHelper.Settings;
 using XboxGamingBarHelper.Systems;
+using XboxGamingBarHelper.Windows;
 using XboxGamingBarHelper.AutoTDP;
 using XboxGamingBarHelper.DefaultGameProfiles;
 using XboxGamingBarHelper.Labs;
@@ -401,6 +403,10 @@ namespace XboxGamingBarHelper
                 Logger.Debug($"Applying LegionPowerLight: {profile.LegionPowerLight.Value}");
                 legionManager.LegionPowerLight.SetValue(profile.LegionPowerLight.Value);
             }
+
+            // Profile Desktop/Page remaps write the same firmware slots as Steam BPM chords.
+            // Re-assert Labs Steam L/R mappings last so they win when configured.
+            Program.ReapplyLegionSteamFirmwareMappings();
         }
 
         private static void ApplyAutoTDPSettingsFromProfile()
@@ -859,6 +865,7 @@ namespace XboxGamingBarHelper
             // #66: drive PresentMon subprocess lifecycle from the same RunningGame signal.
             // Wrap in try/catch in the caller so PresentMon faults never break profile flow.
             OnRunningGameChangedForPresentMon();
+            HandleDesktopControlsAutoDisableOnGameChange();
 
             // Prevent reentrant profile handling
             if (isApplyingProfile)
@@ -966,6 +973,224 @@ namespace XboxGamingBarHelper
             {
                 profileSwitchTime = DateTime.UtcNow;
                 isApplyingProfile = false;
+            }
+        }
+
+        // When auto-disable is on, suspend Desktop Controls on game launch and restore on exit
+        // if it was on before the game started.
+        private static bool _desktopWasOnBeforeGame;
+        private static bool _desktopSuspendedForGame;
+        private static System.Timers.Timer _desktopAutoDisablePollTimer;
+
+        internal static void EnsureDesktopAutoDisablePollTimer()
+        {
+            if (_desktopAutoDisablePollTimer != null) return;
+            _desktopAutoDisablePollTimer = new System.Timers.Timer(2000);
+            _desktopAutoDisablePollTimer.AutoReset = true;
+            _desktopAutoDisablePollTimer.Elapsed += (_, __) => HandleDesktopControlsAutoDisableOnGameChange();
+            _desktopAutoDisablePollTimer.Start();
+        }
+
+        private static bool IsDesktopControlsEffectivelyActive()
+        {
+            if (legionManager == null) return false;
+            if (legionManager.LegionDesktopControls.Value) return true;
+            if (legionManager.LegionJoystickAsMouseMode.Value != 0) return true;
+            if (Program.IsDesktopAdminMouseRunning()) return true;
+            return false;
+        }
+
+        private static void SuspendDesktopControlsForGame()
+        {
+            if (legionManager == null) return;
+            if (!_desktopSuspendedForGame && IsDesktopControlsEffectivelyActive())
+                _desktopWasOnBeforeGame = true;
+
+            legionManager.ForceSuspendDesktopControlsForGame();
+            _desktopSuspendedForGame = true;
+        }
+
+        private static void RestoreDesktopControlsAfterGame()
+        {
+            if (legionManager == null || !_desktopWasOnBeforeGame) return;
+
+            legionManager.ForceRestoreDesktopControlsAfterGame();
+            _desktopWasOnBeforeGame = false;
+            _desktopSuspendedForGame = false;
+        }
+
+        /// <summary>
+        /// Game detection for auto-disabling Desktop Controls. Steam-only for now: the
+        /// foreground process must be installed under steamapps\common or launched from Steam.
+        /// </summary>
+        private static bool IsGameSessionLikelyActive()
+        {
+            if (systemManager == null) return false;
+
+            int foregroundProcessId = User32.GetForegroundProcessId();
+            if (foregroundProcessId <= 0) return false;
+
+            string foregroundPath = "";
+            string foregroundName = "";
+            try
+            {
+                using (var foregroundProcess = Process.GetProcessById(foregroundProcessId))
+                {
+                    foregroundName = foregroundProcess.ProcessName ?? "";
+                    try { foregroundPath = foregroundProcess.MainModule?.FileName ?? ""; }
+                    catch { /* access denied for some system processes */ }
+                }
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+
+            if (IsNonGameForegroundProcess(foregroundPath, foregroundName))
+                return false;
+
+            if (IsSteamLaunchedGameProcess(foregroundPath, foregroundProcessId))
+                return true;
+
+            var game = systemManager.RunningGame.Value;
+            if (game.IsValid()
+                && game.IsForeground
+                && game.ProcessId == foregroundProcessId
+                && IsSteamLaunchedGameProcess(game.GameId.Path, game.ProcessId))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsSteamLaunchedGameProcess(string path, int processId)
+        {
+            if (IsSteamGameInstallPath(path))
+                return true;
+
+            return User32.HasProcessAncestorNamed(processId, "steam");
+        }
+
+        private static bool IsSteamGameInstallPath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return false;
+
+            string lowerPath = path.Replace('/', '\\').ToLowerInvariant();
+            return lowerPath.Contains(@"\steamapps\common\");
+        }
+
+        private static bool IsBlockedNonGameProcessName(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName))
+                return false;
+
+            string lowerName = processName.ToLowerInvariant();
+            if (lowerName.EndsWith(".exe"))
+                lowerName = lowerName.Substring(0, lowerName.Length - 4);
+
+            string[] blockedProcessNames =
+            {
+                "steam", "steamwebhelper", "steamservice",
+                "epicgameslauncher", "epicwebhelper",
+                "galaxyclient", "goggalaxy",
+                "ubisoftconnect", "upc", "origin", "eadesktop", "xboxpcapp",
+                "explorer", "applicationframehost", "xboxgamingbarhelper", "widgetservice",
+                "searchhost", "startmenuexperiencehost", "shellexperiencehost",
+                "textinputhost", "runtimebroker", "localsend",
+            };
+
+            foreach (string blocked in blockedProcessNames)
+            {
+                if (lowerName == blocked)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsNonGameForegroundProcess(string path, string name)
+        {
+            if (!string.IsNullOrEmpty(name) && IsBlockedNonGameProcessName(name))
+                return true;
+
+            if (string.IsNullOrEmpty(path))
+                return true;
+
+            string fileName = System.IO.Path.GetFileName(path);
+            if (string.IsNullOrEmpty(fileName))
+                return true;
+
+            string lowerFile = fileName.ToLowerInvariant();
+
+            // Launchers/store clients/shell — user still wants Desktop Controls here.
+            string[] blockedExeNames =
+            {
+                "steam.exe",
+                "steamwebhelper.exe",
+                "steamservice.exe",
+                "epicgameslauncher.exe",
+                "epicwebhelper.exe",
+                "galaxyclient.exe",
+                "goggalaxy.exe",
+                "ubisoftconnect.exe",
+                "upc.exe",
+                "origin.exe",
+                "eadesktop.exe",
+                "xboxpcapp.exe",
+                "explorer.exe",
+                "applicationframehost.exe",
+                "xboxgamingbarhelper.exe",
+                "widgetservice.exe",
+                "searchhost.exe",
+                "startmenuexperiencehost.exe",
+                "shellexperiencehost.exe",
+                "textinputhost.exe",
+                "runtimebroker.exe",
+                "localsend.exe",
+            };
+
+            foreach (string blocked in blockedExeNames)
+            {
+                if (lowerFile == blocked)
+                    return true;
+            }
+
+            string lowerPath = path.Replace('/', '\\').ToLowerInvariant();
+
+            if (lowerPath.Contains(@"\epic games\launcher\"))
+                return true;
+            if (lowerPath.Contains(@"\gog galaxy\") && !lowerPath.Contains(@"\games\"))
+                return true;
+            if (lowerPath.Contains(@"\ubisoft game launcher\") && !lowerPath.Contains(@"\games\"))
+                return true;
+
+            return false;
+        }
+
+        private static void HandleDesktopControlsAutoDisableOnGameChange()
+        {
+            try
+            {
+                if (legionManager == null || systemManager == null) return;
+                if (!legionManager.LegionDesktopAutoDisableInGame.Value) return;
+
+                bool gameRunning = IsGameSessionLikelyActive();
+
+                if (gameRunning)
+                {
+                    // Re-assert every poll — widget/profile code can re-apply desktop overlay mid-game.
+                    SuspendDesktopControlsForGame();
+                }
+                else if (_desktopSuspendedForGame)
+                {
+                    RestoreDesktopControlsAfterGame();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"HandleDesktopControlsAutoDisableOnGameChange failed: {ex.Message}");
             }
         }
 

@@ -76,9 +76,10 @@ namespace XboxGamingBar.Data
 
         private void UpdateSensitivityGridVisibility()
         {
+            // Sensitivity lives in the Desktop & mouse card and stays visible there.
             if (sensitivityGrid != null)
             {
-                sensitivityGrid.Visibility = Value > 0 ? Visibility.Visible : Visibility.Collapsed;
+                sensitivityGrid.Visibility = Visibility.Visible;
             }
         }
 

@@ -888,12 +888,27 @@ namespace XboxGamingBarHelper
                         Logger.Info("Re-applying user Page-button firmware mapping after stock restore");
                         page.ForceSetValue(page.Value);
                     }
+
+                    // Steam BPM chords must win over stock Desktop/Page restore when configured.
+                    ReapplyLegionSteamFirmwareMappings();
                 }
                 catch (Exception ex)
                 {
                     Logger.Warn($"Front-button mapping re-apply failed: {ex.Message}");
                 }
             });
+        }
+
+        internal static void ReapplyLegionSteamFirmwareMappings()
+        {
+            try
+            {
+                legionManager?.ReapplyLegionSteamFirmwareMappings();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ReapplyLegionSteamFirmwareMappings failed: {ex.Message}");
+            }
         }
 
         private static void LegionButtonMonitor_BatteryUpdated(object sender, LegionButtonBatteryEventArgs e)
@@ -983,6 +998,7 @@ namespace XboxGamingBarHelper
 
                 bool lFound = Settings.LocalSettingsHelper.TryGetValue<int>("LegionL_Action", out var lActionVal);
                 if (lFound) lAction = lActionVal;
+                if (lAction > 7) lAction = 0; // removed Steam BPM UI entries (old index 8/9)
                 if (Settings.LocalSettingsHelper.TryGetValue<string>("LegionL_Shortcut", out var lShortcutVal))
                     lShortcut = lShortcutVal;
                 if (Settings.LocalSettingsHelper.TryGetValue<string>("LegionL_Command", out var lCommandVal))
@@ -996,6 +1012,7 @@ namespace XboxGamingBarHelper
 
                 bool rFound = Settings.LocalSettingsHelper.TryGetValue<int>("LegionR_Action", out var rActionVal);
                 if (rFound) rAction = rActionVal;
+                if (rAction > 7) rAction = 0;
                 if (Settings.LocalSettingsHelper.TryGetValue<string>("LegionR_Shortcut", out var rShortcutVal))
                     rShortcut = rShortcutVal;
                 if (Settings.LocalSettingsHelper.TryGetValue<string>("LegionR_Command", out var rCommandVal))
@@ -1039,6 +1056,7 @@ namespace XboxGamingBarHelper
                     int longAction = 0;
                     if (Settings.LocalSettingsHelper.TryGetValue<int>($"Legion{side}_LongAction", out var longActionVal))
                         longAction = longActionVal;
+                    if (longAction > 7) longAction = 0;
                     string longShortcut = "";
                     string longCommand = "";
                     if (Settings.LocalSettingsHelper.TryGetValue<string>($"Legion{side}_LongShortcut", out var lsv)) longShortcut = lsv;
@@ -1056,6 +1074,12 @@ namespace XboxGamingBarHelper
                         legionButtonMonitor?.ConfigureButtonLongPress(side, false, 0, "");
                     }
                 }
+
+                bool holdForMouse = false;
+                if (Settings.LocalSettingsHelper.TryGetValue<bool>("LegionL_HoldForMouse", out var holdForMouseVal))
+                    holdForMouse = holdForMouseVal;
+                legionManager?.LegionLHoldForMouse.ForceSetValue(holdForMouse);
+                Logger.Info($"Labs: Loaded Legion L hold-for-mouse={holdForMouse}");
             }
             catch (Exception ex)
             {
@@ -1148,6 +1172,13 @@ namespace XboxGamingBarHelper
         {
             try
             {
+                if (actionType >= (int)LegionButtonAction.SteamMainMenu)
+                {
+                    Logger.Info($"Labs: Ignoring removed Steam BPM action ({actionType}) for Legion {button}");
+                    enabled = false;
+                    actionType = 0;
+                }
+
                 lock (legionButtonMonitorLock)
                 {
                     LegionButtonMonitor monitor = EnsureLegionButtonMonitor();
@@ -1182,6 +1213,8 @@ namespace XboxGamingBarHelper
                         }
                     );
 
+                    ApplyLegionSteamFirmwareMapping(button, enabled, actionType);
+
                     // Handle different scenarios. (ViGEm retirement: the old
                     // restart-on-pad-requirement-change branch is gone — button
                     // config is always hot-applied while running; Guide delivery
@@ -1212,7 +1245,11 @@ namespace XboxGamingBarHelper
                                        actionType == 0 ? "Xbox Guide" :
                                        actionType == 1 ? $"Shortcut: {shortcutOrCommand}" :
                                        actionType == 2 ? $"Command: {shortcutOrCommand}" :
-                                       "Focus GoTweaks";
+                                       actionType == 3 ? "Focus GoTweaks" :
+                                       actionType == 4 ? "Toggle Desktop Controls" :
+                                       actionType == 5 ? "Touch Keyboard" :
+                                       actionType == 6 ? "Toggle Controller Emulation" :
+                                       $"Action {actionType}";
                     Logger.Info($"Labs: Legion {button} button configured -> {actionName}");
                     return true;
                 }
@@ -1221,6 +1258,25 @@ namespace XboxGamingBarHelper
             {
                 Logger.Error($"Labs: Error configuring Legion {button} button remap: {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Clears legacy Steam BPM firmware mappings (Ctrl+1/2 on Desktop/Page). Those Labs
+        /// options were removed — Steam BPM shortcuts cannot be delivered reliably from GoTweaks.
+        /// </summary>
+        private static void ApplyLegionSteamFirmwareMapping(string button, bool enabled, int actionType)
+        {
+            if (legionManager == null) return;
+            try
+            {
+                legionManager.SetLegionSteamFirmwareDesired(legionLMainMenu: false, legionRQuickAccess: false);
+                legionManager.ClearLegionLSteamMainMenuFirmware();
+                legionManager.ClearLegionRSteamQuickAccessFirmware();
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ApplyLegionSteamFirmwareMapping failed: {ex.Message}");
             }
         }
 

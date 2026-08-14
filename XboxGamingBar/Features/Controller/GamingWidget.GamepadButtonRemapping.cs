@@ -210,7 +210,7 @@ namespace XboxGamingBar
 
         private void LegionGamepadButtonSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (isLoadingControllerProfile || isSwitchingControllerProfile)
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || isReloadingSharedStorage)
                 return;
 
             if (LegionGamepadButtonSelectorComboBox == null || LegionGamepadButtonSelectorComboBox.SelectedIndex < 0)
@@ -222,7 +222,7 @@ namespace XboxGamingBar
 
         private void LegionGamepadMapping_Changed(object sender, SelectionChangedEventArgs e)
         {
-            if (isLoadingControllerProfile || isSwitchingControllerProfile)
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || isReloadingSharedStorage)
                 return;
 
             // Skip if a profile was just applied (prevents duplicate sends from queued UI events)
@@ -260,7 +260,7 @@ namespace XboxGamingBar
 
         private void LegionGamepadKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (isLoadingControllerProfile || isSwitchingControllerProfile)
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || isReloadingSharedStorage)
                 return;
 
             // Skip if a profile was just applied (prevents duplicate sends from queued UI events)

@@ -289,6 +289,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
         // Desktop controls preset (per-game profile state tracking)
         public readonly LegionDesktopControlsProperty LegionDesktopControls;
+        public readonly LegionDesktopAutoDisableInGameProperty LegionDesktopAutoDisableInGame;
+        public readonly LegionLHoldForMouseProperty LegionLHoldForMouse;
 
         // Controller battery properties
         public readonly ControllerBatteryLeftProperty ControllerBatteryLeft;
@@ -601,6 +603,8 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
 
             // Initialize desktop controls property (per-game profile state tracking)
             LegionDesktopControls = new LegionDesktopControlsProperty(false, this);
+            LegionDesktopAutoDisableInGame = new LegionDesktopAutoDisableInGameProperty(true, this);
+            LegionLHoldForMouse = new LegionLHoldForMouseProperty(false, this);
 
             // Initialize controller battery properties
             ControllerBatteryLeft = new ControllerBatteryLeftProperty(-1, this);
@@ -3193,6 +3197,143 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
                 failureReason = ex.Message;
                 Logger.Error($"Error setting {button} mapping: {ex.Message}");
                 return false;
+            }
+        }
+
+        private bool legionRSteamQuickAccessFirmwareActive;
+        private bool legionLSteamMainMenuFirmwareActive;
+        private bool legionLSteamMainMenuRequested;
+        private bool legionRSteamQuickAccessRequested;
+
+        /// <summary>True when Legion R Quick Access is handled by firmware keyboard on Page/Share (Ctrl+2).</summary>
+        public bool IsLegionRSteamQuickAccessFirmwareActive => legionRSteamQuickAccessFirmwareActive;
+
+        /// <summary>True when Legion L Main Menu is handled by firmware keyboard on Desktop/Mode (Ctrl+1).</summary>
+        public bool IsLegionLSteamMainMenuFirmwareActive => legionLSteamMainMenuFirmwareActive;
+
+        public void SetLegionSteamFirmwareDesired(bool? legionLMainMenu = null, bool? legionRQuickAccess = null)
+        {
+            if (legionLMainMenu.HasValue) legionLSteamMainMenuRequested = legionLMainMenu.Value;
+            if (legionRQuickAccess.HasValue) legionRSteamQuickAccessRequested = legionRQuickAccess.Value;
+        }
+
+        /// <summary>
+        /// Re-applies Steam BPM firmware chords after monitor init clears Desktop/Page bindings.
+        /// </summary>
+        public void ReapplyLegionSteamFirmwareMappings()
+        {
+            if (legionLSteamMainMenuRequested)
+                TryApplyLegionLSteamMainMenuFirmware(out _);
+            else
+                ClearLegionLSteamMainMenuFirmware();
+
+            if (legionRSteamQuickAccessRequested)
+                TryApplyLegionRSteamQuickAccessFirmware(out _);
+            else
+                ClearLegionRSteamQuickAccessFirmware();
+        }
+
+        /// <summary>
+        /// Maps Legion L (Desktop/Mode, 0x25) to Ctrl+1 at the firmware layer so Steam BPM
+        /// receives real keyboard HID (SendInput/InputInjector are ignored by Steam).
+        /// </summary>
+        public bool TryApplyLegionLSteamMainMenuFirmware(out string failureReason)
+        {
+            failureReason = null;
+            try
+            {
+                using var controller = new LegionGoController();
+                if (!controller.Connect())
+                {
+                    failureReason = "controller not connected";
+                    legionLSteamMainMenuFirmwareActive = false;
+                    return false;
+                }
+
+                bool ok = SetLegionButtonMapping(
+                    GamepadButton.DesktopButton,
+                    mappingType: 1,
+                    values: new[] { 0xE0, 0x1E },
+                    failureReason: out failureReason);
+                legionLSteamMainMenuFirmwareActive = ok;
+                if (ok)
+                    Logger.Info("Legion L Steam Main Menu: firmware Ctrl+1 on Desktop/Mode (real HID for Steam BPM)");
+                else if (string.IsNullOrEmpty(failureReason))
+                    failureReason = "controller rejected Desktop/Mode Ctrl+1 mapping";
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                failureReason = ex.Message;
+                legionLSteamMainMenuFirmwareActive = false;
+                Logger.Warn($"TryApplyLegionLSteamMainMenuFirmware failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        public void ClearLegionLSteamMainMenuFirmware()
+        {
+            legionLSteamMainMenuFirmwareActive = false;
+            try
+            {
+                SetLegionButtonMapping(GamepadButton.DesktopButton, 0, Array.Empty<int>(), out _);
+                Logger.Info("Legion L Steam Main Menu: cleared firmware Desktop/Mode mapping");
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"ClearLegionLSteamMainMenuFirmware: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Maps Legion R (Page/Share, 0x26) to Ctrl+2 at the firmware layer so Steam BPM
+        /// receives real keyboard HID (SendInput/InputInjector are ignored by Steam).
+        /// </summary>
+        public bool TryApplyLegionRSteamQuickAccessFirmware(out string failureReason)
+        {
+            failureReason = null;
+            try
+            {
+                using var controller = new LegionGoController();
+                if (!controller.Connect())
+                {
+                    failureReason = "controller not connected";
+                    legionRSteamQuickAccessFirmwareActive = false;
+                    return false;
+                }
+
+                bool ok = SetLegionButtonMapping(
+                    GamepadButton.PageButton,
+                    mappingType: 1,
+                    values: new[] { 0xE0, 0x1F },
+                    failureReason: out failureReason);
+                legionRSteamQuickAccessFirmwareActive = ok;
+                if (ok)
+                    Logger.Info("Legion R Steam Quick Access: firmware Ctrl+2 on Page/Share (real HID for Steam BPM)");
+                else if (string.IsNullOrEmpty(failureReason))
+                    failureReason = "controller rejected Page/Share Ctrl+2 mapping";
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                failureReason = ex.Message;
+                legionRSteamQuickAccessFirmwareActive = false;
+                Logger.Warn($"TryApplyLegionRSteamQuickAccessFirmware failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        public void ClearLegionRSteamQuickAccessFirmware()
+        {
+            legionRSteamQuickAccessFirmwareActive = false;
+            try
+            {
+                SetLegionButtonMapping(GamepadButton.PageButton, 0, Array.Empty<int>(), out _);
+                Logger.Info("Legion R Steam Quick Access: cleared firmware Page/Share mapping");
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"ClearLegionRSteamQuickAccessFirmware: {ex.Message}");
             }
         }
 

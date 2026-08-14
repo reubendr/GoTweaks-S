@@ -1016,6 +1016,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             string reason = "Legion manager is not available.";
             LastApplySucceeded = Manager != null && Manager.SetLegionButtonMapping(GamepadButton.DesktopButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
             LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Desktop button mapping could not be applied.");
+            Manager?.ReapplyLegionSteamFirmwareMappings();
         }
     }
 
@@ -1040,6 +1041,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             string reason = "Legion manager is not available.";
             LastApplySucceeded = Manager != null && Manager.SetLegionButtonMapping(GamepadButton.PageButton, type, ButtonMappingParser.GetMappingValues(type, gamepadAction, keyboardKeys, mouseButton), out reason);
             LastApplyFailureReason = LastApplySucceeded ? null : (reason ?? "Page button mapping could not be applied.");
+            Manager?.ReapplyLegionSteamFirmwareMappings();
         }
     }
 
@@ -1470,6 +1472,7 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
         {
             base.NotifyPropertyChanged(propertyName);
             Logger.Info($"LegionDesktopControls changed to {Value}");
+            Manager?.OnDesktopControlsChanged(Value);
             // The button mapping / joystick-as-mouse application happens through their own
             // properties. Here we additionally neutralize the emulated pad while Desktop
             // Controls is on: with controller emulation running, the physical stick/buttons
@@ -1478,6 +1481,41 @@ namespace XboxGamingBarHelper.Devices.Libraries.Legion
             // emulation isn't running.
             try { XboxGamingBarHelper.ControllerEmulation.Viiper.ViiperEmulationManager.SetDesktopControlsActive(Value); }
             catch (Exception ex) { Logger.Warn($"Desktop-controls emu neutralize threw: {ex.Message}"); }
+        }
+    }
+
+    // Auto-disable Desktop Controls when a game is detected (default on).
+    internal class LegionDesktopAutoDisableInGameProperty : HelperProperty<bool, LegionManager>
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public LegionDesktopAutoDisableInGameProperty(bool initialValue, LegionManager inManager)
+            : base(initialValue, null, Function.LegionDesktopAutoDisableInGame, inManager)
+        {
+        }
+
+        protected override void NotifyPropertyChanged(string propertyName = "")
+        {
+            base.NotifyPropertyChanged(propertyName);
+            Logger.Info($"LegionDesktopAutoDisableInGame changed to {Value}");
+        }
+    }
+
+    // Hold Legion L for temporary mouse access (SteamOS-style; reserves the Hold remap row).
+    internal class LegionLHoldForMouseProperty : HelperProperty<bool, LegionManager>
+    {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public LegionLHoldForMouseProperty(bool initialValue, LegionManager inManager)
+            : base(initialValue, null, Function.LegionLHoldForMouse, inManager)
+        {
+        }
+
+        protected override void NotifyPropertyChanged(string propertyName = "")
+        {
+            base.NotifyPropertyChanged(propertyName);
+            Logger.Info($"LegionLHoldForMouse changed to {Value}");
+            Manager?.OnLegionLHoldForMouseChanged(Value);
         }
     }
 

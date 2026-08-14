@@ -691,9 +691,7 @@
                             </Grid>
                         </Button>
 
-                        <!-- Panel Brightness slider (#50). Hidden by default; revealed via the
-                             "Show Brightness Slider" toggle in Customize. Disabled when the built-in
-                             panel isn't controllable (e.g. docked, internal display off). -->
+                        <!-- Panel Brightness slider. Shown by default; can be hidden via Customize. -->
                         <Border x:Name="PanelBrightnessRow"
                                 Background="#1A1C1E"
                                 CornerRadius="12"
@@ -701,7 +699,7 @@
                                 Margin="0,0,0,8"
                                 BorderBrush="#50555C"
                                 BorderThickness="1"
-                                Visibility="Collapsed">
+                                Visibility="Visible">
                             <StackPanel>
                                 <Grid>
                                     <TextBlock Text="Brightness" Foreground="#FFFFFF" FontSize="13" VerticalAlignment="Center"/>
@@ -1152,16 +1150,17 @@
                                               Grid.Column="1"
                                               SelectionChanged="PerformanceOverlayComboBox_SelectionChanged">
                                         <ComboBoxItem Content="Off" Tag="0" IsSelected="True"/>
-                                        <ComboBoxItem Content="Basic" Tag="1"/>
-                                        <ComboBoxItem Content="Detailed" Tag="2"/>
-                                        <ComboBoxItem Content="Full" Tag="3"/>
+                                        <ComboBoxItem Content="FPS Only" Tag="1"/>
+                                        <ComboBoxItem Content="Basic" Tag="2"/>
+                                        <ComboBoxItem Content="Detailed" Tag="3"/>
+                                        <ComboBoxItem Content="Full" Tag="4"/>
                                     </ComboBox>
                                 </Grid>
 
                                 <!-- Hidden slider for property system compatibility -->
                                 <Slider x:Name="PerformanceOverlaySlider"
                                         Visibility="Collapsed"
-                                        Minimum="0" Maximum="3"
+                                        Minimum="0" Maximum="4"
                                         Value="0"
                                         ValueChanged="PerformanceOverlaySlider_ValueChanged"/>
                             </StackPanel>
@@ -3498,9 +3497,10 @@
                                                       Width="120"
                                                       Grid.Column="1"
                                                       SelectionChanged="OSDCustomizeLevelComboBox_SelectionChanged">
-                                                <ComboBoxItem Content="Basic" Tag="1" IsSelected="True"/>
-                                                <ComboBoxItem Content="Detailed" Tag="2"/>
-                                                <ComboBoxItem Content="Full" Tag="3"/>
+                                                <ComboBoxItem Content="FPS Only" Tag="1" IsSelected="True"/>
+                                                <ComboBoxItem Content="Basic" Tag="2"/>
+                                                <ComboBoxItem Content="Detailed" Tag="3"/>
+                                                <ComboBoxItem Content="Full" Tag="4"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -5632,13 +5632,13 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <TextBlock Text="Check for updates on start" FontSize="14" Foreground="#FFFFFF"/>
-                                        <TextBlock Text="Look for new GoTweaks releases when the widget opens"
+                                        <TextBlock Text="Optional: check reubendr/GoTweaks-S for new releases when the widget opens (off by default for this fork)."
                                                    FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <ToggleSwitch x:Name="GoTweaksUpdateOnStartCheckbox"
                                                   Grid.Column="1"
                                                   Style="{StaticResource ModernToggleStyle}"
-                                                  IsOn="True"
+                                                  IsOn="False"
                                                   Toggled="GoTweaksUpdateOnStartCheckbox_Changed"/>
                                 </Grid>
                                 <Grid Margin="0,12,0,0">
@@ -7840,6 +7840,108 @@
                         </StackPanel>
                         <!-- End Lighting Section -->
 
+                        <!-- Desktop & mouse: Steam Input-style desktop companion + optional hold-L overlay -->
+                        <StackPanel x:Name="DesktopMouseSection">
+                            <TextBlock Text="Desktop &amp; mouse" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Use the Legion controller on the Windows desktop"
+                                               Style="{StaticResource CardCaptionStyle}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Desktop Controls"
+                                                       FontSize="13"
+                                                       Foreground="#FFFFFF"/>
+                                            <TextBlock Text="RS = cursor, LS = scroll, LT = right click, RT = left click (Ctrl+Shift+D)"
+                                                       FontSize="11"
+                                                       Foreground="#888888"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="LegionDesktopControlsToggle"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      IsOn="False"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Auto-disable in games"
+                                                       FontSize="13"
+                                                       Foreground="#FFFFFF"/>
+                                            <TextBlock Text="Turn off Desktop Controls when a game is detected, restore on desktop."
+                                                       FontSize="11"
+                                                       Foreground="#888888"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="LegionDesktopAutoDisableInGameToggle"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      IsOn="True"/>
+                                    </Grid>
+                                    <Grid x:Name="LegionJoystickMouseSensGrid" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Sensitivity" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Slider x:Name="LegionJoystickMouseSensSlider"
+                                                    Width="120" Minimum="10" Maximum="100" Value="50"
+                                                    Style="{StaticResource ModernSliderStyle}"/>
+                                            <TextBlock x:Name="LegionJoystickMouseSensValue"
+                                                       Text="50" Width="30" Margin="8,0,0,0"
+                                                       VerticalAlignment="Center" Foreground="#AAAAAA"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Height="1" Background="#33FFFFFF" Margin="0,14,0,0"/>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="Hold Legion L for mouse (experimental)"
+                                                       FontSize="13"
+                                                       Foreground="#FFFFFF"/>
+                                            <TextBlock Text="Temporary desktop layout while L is held (works in games). The controller will reconnect after a long hold — that is normal Legion hardware behavior."
+                                                       FontSize="11"
+                                                       Foreground="#888888"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="LegionLHoldForMouseToggle"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ModernToggleStyle}"
+                                                      OffContent=""
+                                                      OnContent=""/>
+                                    </Grid>
+                                    <TextBlock x:Name="LegionHoldMouseCaveatText"
+                                               Text="Long holds trigger a controller reconnect by design. Use Desktop Controls above for everyday desktop use without holding L."
+                                               FontSize="11"
+                                               Foreground="#C8A050"
+                                               TextWrapping="Wrap"
+                                               Margin="0,8,0,0"
+                                               Visibility="Collapsed"/>
+                                    <!-- Hidden: backend still keys off joystick-as-mouse mode (RS=2 when desktop on). -->
+                                    <ComboBox x:Name="LegionJoystickAsMouseComboBox"
+                                              Visibility="Collapsed"
+                                              Style="{StaticResource ModernComboBoxStyle}">
+                                        <ComboBoxItem Content="Disabled" Tag="0"/>
+                                        <ComboBoxItem Content="Left Stick" Tag="1"/>
+                                        <ComboBoxItem Content="Right Stick" Tag="2"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
                         <!-- Controller Remapping Section (hidden on devices without HID controller remap support) -->
                         <StackPanel x:Name="ControllerRemappingSection">
                         <!-- Controller Remapping Section Header -->
@@ -7875,7 +7977,7 @@
                                                   IsEnabled="False"
                                                   Toggled="LegionControllerProfileToggle_Toggled"/>
                                 </Grid>
-                                <TextBlock Text="Stores button mappings, deadzones, trigger travel, gyro settings, joystick mouse, and lighting per game"
+                                <TextBlock Text="Stores button mappings, deadzones, trigger travel, gyro settings, and lighting per game"
                                            Style="{StaticResource CardCaptionStyle}"
                                            TextWrapping="Wrap"
                                            Margin="0,8,0,0"/>
@@ -7942,31 +8044,6 @@
                                               Unchecked="ProfileSettingsCheckBox_Changed"/>
                                 </StackPanel>
 
-                                <!-- Desktop Controls toggle - shares this card with the per-game
-                                     profile toggle (was a standalone card), divider-separated like
-                                     the Performance tab's Per-Game / Power Source pairing. -->
-                                <StackPanel>
-                                    <Border Height="1" Background="#33FFFFFF" Margin="0,10,0,10"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="Desktop Controls"
-                                                       FontSize="13"
-                                                       Foreground="#FFFFFF"/>
-                                            <TextBlock Text="A separate mouse/keyboard layout for desktop use. Remaps you make while it's on are saved to Desktop Controls and restored next time (Ctrl+Shift+D)."
-                                                       FontSize="11"
-                                                       Foreground="#888888"
-                                                       TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                        <ToggleSwitch x:Name="LegionDesktopControlsToggle"
-                                                      Grid.Column="1"
-                                                      Style="{StaticResource ModernToggleStyle}"
-                                                      IsOn="False"/>
-                                    </Grid>
-                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -8007,8 +8084,7 @@
                                     </ToggleButton>
                                 </Grid>
                                 <StackPanel x:Name="ButtonRemappingContent" Margin="0,12,0,0" Visibility="Collapsed">
-                                    <!-- Device button layout reference (front/back of the detected model;
-                                         defaults to Go 2, swapped by UpdateDeviceArtForVariant) -->
+                                    <!-- Static front/back layout reference (no selection overlay) -->
                                     <Grid Margin="0,0,0,14">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -8016,11 +8092,21 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Margin="0,0,6,0">
                                             <TextBlock Text="Front" FontSize="11" Foreground="#888888" Margin="0,0,0,4" HorizontalAlignment="Center"/>
-                                            <Image x:Name="DeviceLayoutFrontImage" Source="/Assets/DeviceViews/LegionGo2_Front.png" Stretch="Uniform" MaxHeight="190"/>
+                                            <Border Background="#121212" CornerRadius="8" Padding="6" BorderBrush="#2A2A2A" BorderThickness="1">
+                                                <Image x:Name="RemapLayoutFrontImage"
+                                                       Source="/Assets/DeviceViews/LegionGo2_Front.png"
+                                                       Stretch="Uniform"
+                                                       MaxHeight="180"/>
+                                            </Border>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Margin="6,0,0,0">
                                             <TextBlock Text="Back" FontSize="11" Foreground="#888888" Margin="0,0,0,4" HorizontalAlignment="Center"/>
-                                            <Image x:Name="DeviceLayoutBackImage" Source="/Assets/DeviceViews/LegionGo2_Back.png" Stretch="Uniform" MaxHeight="190"/>
+                                            <Border Background="#121212" CornerRadius="8" Padding="6" BorderBrush="#2A2A2A" BorderThickness="1">
+                                                <Image x:Name="RemapLayoutBackImage"
+                                                       Source="/Assets/DeviceViews/LegionGo2_Back.png"
+                                                       Stretch="Uniform"
+                                                       MaxHeight="180"/>
+                                            </Border>
                                         </StackPanel>
                                     </Grid>
                                     <!-- Back Buttons Section -->
@@ -8045,7 +8131,8 @@
                                         <ColumnDefinition Width="80*"/>
                                     </Grid.ColumnDefinitions>
                                     <ComboBox x:Name="LegionRemapButtonSelectorComboBox" Grid.Column="0"
-                                              Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0"><x:String>Y1</x:String><x:String>Y2</x:String><x:String>Y3</x:String><x:String>M1</x:String><x:String>M2</x:String><x:String>M3</x:String><x:String>Desktop</x:String><x:String>Page</x:String><x:String>LS Click</x:String><x:String>LS Up</x:String><x:String>LS Down</x:String><x:String>LS Left</x:String><x:String>LS Right</x:String><x:String>RS Click</x:String><x:String>RS Up</x:String><x:String>RS Down</x:String><x:String>RS Left</x:String><x:String>RS Right</x:String><x:String>D-Pad Up</x:String><x:String>D-Pad Down</x:String><x:String>D-Pad Left</x:String><x:String>D-Pad Right</x:String><x:String>A</x:String><x:String>B</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>LB</x:String><x:String>LT</x:String><x:String>RB</x:String><x:String>RT</x:String><x:String>Start</x:String><x:String>Select</x:String></ComboBox><Button x:Name="LegionRemapButtonSelectorPicker" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Top" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="32" Padding="8,4,8,4"/>
+                                              Style="{StaticResource ModernComboBoxStyle}" SelectedIndex="0"><x:String>Y1</x:String><x:String>Y2</x:String><x:String>Y3</x:String><x:String>M1</x:String><x:String>M2</x:String><x:String>M3</x:String><x:String>Desktop</x:String><x:String>Page</x:String><x:String>LS Click</x:String><x:String>LS Up</x:String><x:String>LS Down</x:String><x:String>LS Left</x:String><x:String>LS Right</x:String><x:String>RS Click</x:String><x:String>RS Up</x:String><x:String>RS Down</x:String><x:String>RS Left</x:String><x:String>RS Right</x:String><x:String>D-Pad Up</x:String><x:String>D-Pad Down</x:String><x:String>D-Pad Left</x:String><x:String>D-Pad Right</x:String><x:String>A</x:String><x:String>B</x:String><x:String>X</x:String><x:String>Y</x:String><x:String>LB</x:String><x:String>LT</x:String><x:String>RB</x:String><x:String>RT</x:String><x:String>Start</x:String><x:String>Select</x:String></ComboBox>
+                                    <Button x:Name="LegionRemapButtonSelectorPicker" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Top" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="32" Padding="8,4,8,4"/>
                                     <Grid Grid.Column="1" x:Name="RemapEditorHost">
 <StackPanel x:Name="LegionButtonY1Row" Visibility="Collapsed" Margin="0">
                                     <Grid>
@@ -8507,8 +8594,6 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
-                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
-                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -8543,9 +8628,11 @@
                                                 Margin="8,0,0,0"
                                                 Click="LegionLCommandApplyButton_Click"/>
                                     </Grid><TextBlock x:Name="LegionLRemapStatusText" FontSize="11" Foreground="#FFC864" TextWrapping="Wrap" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed"/>
+                                    <!-- Hold-for-mouse moved to Desktop &amp; mouse section -->
                                     <!-- Legion L LONG-press Row: separate action fired after holding
                                          ~0.8s. Short press then fires on RELEASE instead of press. -->
-                                    <Grid Margin="0,8,0,0">
+                                    <StackPanel x:Name="LegionLLongHoldSection" Margin="0,8,0,0">
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="85"/>
                                             <ColumnDefinition Width="*"/>
@@ -8563,8 +8650,6 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
-                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
-                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionLLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8595,6 +8680,7 @@
                                                 Margin="8,0,0,0"
                                                 Click="LegionLLongCommandApplyButton_Click"/>
                                     </Grid>
+                                    </StackPanel>
 
                                     <!-- Legion R group: glyph header, then indented Click / Hold rows -->
                                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center"><Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"><Image.Source><SvgImageSource UriSource="ms-appx:///Assets/ButtonGlyphs/qam.svg" RasterizePixelWidth="44" RasterizePixelHeight="44"/></Image.Source></Image><TextBlock Text="Legion R:"
@@ -8619,8 +8705,6 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
-                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
-                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
 
@@ -8675,8 +8759,6 @@
                                             <ComboBoxItem Content="Desktop Controls"/>
                                             <ComboBoxItem Content="Touch Keyboard"/>
                                             <ComboBoxItem Content="Toggle Controller Emu"/>
-                                            <ComboBoxItem Content="Steam Main Menu (BPM)"/>
-                                            <ComboBoxItem Content="Steam Quick Access (BPM)"/>
                                         </ComboBox>
                                     </Grid>
                                     <StackPanel x:Name="LegionRLongShortcutPanel" Margin="0,8,0,0" HorizontalAlignment="Right" Visibility="Collapsed" Orientation="Horizontal">
@@ -8881,48 +8963,6 @@
                                               Style="{StaticResource ModernToggleStyle}"
                                               IsOn="False"/>
                             </Grid>
-                        </Border>
-
-                        <!-- Joystick as Mouse Card -->
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel Spacing="12">
-                                <TextBlock Text="Joystick as Mouse" Style="{StaticResource CardTitleStyle}"/>
-                                <TextBlock Text="Use a joystick to control mouse cursor"
-                                           Style="{StaticResource CardCaptionStyle}"/>
-
-                                <!-- Mode Selection -->
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="100"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Stick" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14"/>
-                                    <ComboBox x:Name="LegionJoystickAsMouseComboBox" Grid.Column="1"
-                                              Width="120" HorizontalAlignment="Right"
-                                              Style="{StaticResource ModernComboBoxStyle}">
-                                        <ComboBoxItem Content="Disabled" Tag="0"/>
-                                        <ComboBoxItem Content="Left Stick" Tag="1"/>
-                                        <ComboBoxItem Content="Right Stick" Tag="2"/>
-                                    </ComboBox>
-                                </Grid>
-
-                                <!-- Sensitivity (shown when not disabled) -->
-                                <Grid x:Name="LegionJoystickMouseSensGrid" Visibility="Collapsed">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="100"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Sensitivity" VerticalAlignment="Center" Foreground="#AAAAAA" FontSize="14"/>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Slider x:Name="LegionJoystickMouseSensSlider"
-                                                Width="120" Minimum="10" Maximum="100" Value="50"
-                                                Style="{StaticResource ModernSliderStyle}"/>
-                                        <TextBlock x:Name="LegionJoystickMouseSensValue"
-                                                   Text="50" Width="30" Margin="8,0,0,0"
-                                                   VerticalAlignment="Center" Foreground="#AAAAAA"/>
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
                         </Border>
 
                         <!-- Deadzones Card -->

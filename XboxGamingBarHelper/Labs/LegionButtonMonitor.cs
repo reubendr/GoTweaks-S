@@ -195,6 +195,7 @@ namespace XboxGamingBarHelper.Labs
         private DateTime legionRPressStartUtc;
         private bool legionLLongFired;
         private bool legionRLongFired;
+        private bool legionLHoldForMouseEnabled;
 
         // Configuration for Scroll Wheel (unified scroll + click)
         // Note: Raw Input API can't distinguish scroll up/down, so we have unified "scroll" action
@@ -796,6 +797,40 @@ namespace XboxGamingBarHelper.Labs
         }
 
         /// <summary>
+        /// Read raw Legion L/R press state from a tablet-family HID report (byte 16 attached / 18 detached, bits 0x80/0x40).
+        /// Go 2 also reports Desktop/Page on byte 20 for the gamepad forwarder, but Labs remapping is verified on byte 16.
+        /// </summary>
+        private bool TryGetLegionFrontButtonRawState(byte[] buffer, uint bytesRead, out bool legionLPressed, out bool legionRPressed)
+        {
+            legionLPressed = false;
+            legionRPressed = false;
+
+            if (bytesRead <= currentButtonByte)
+                return false;
+
+            byte currentBtnValue = buffer[currentButtonByte];
+            legionLPressed = (currentBtnValue & LEGION_L_BIT) != 0;
+            legionRPressed = (currentBtnValue & LEGION_R_BIT) != 0;
+            return true;
+        }
+
+        private static string FormatLegionButtonActionName(LegionButtonAction actionType, string shortcutKeys, string commandPath)
+        {
+            return actionType switch
+            {
+                LegionButtonAction.XboxGuide => "Xbox Guide",
+                LegionButtonAction.KeyboardShortcut => $"Shortcut: {shortcutKeys}",
+                LegionButtonAction.RunCommand => $"Command: {commandPath}",
+                LegionButtonAction.SteamMainMenu => "Steam Main Menu (Ctrl+1)",
+                LegionButtonAction.SteamQuickAccess => "Steam Quick Access (Ctrl+2)",
+                LegionButtonAction.ToggleDesktopControls => "Toggle Desktop Controls",
+                LegionButtonAction.TouchKeyboard => "Touch Keyboard",
+                LegionButtonAction.ToggleControllerEmulation => "Toggle Controller Emulation",
+                _ => "Focus GoTweaks",
+            };
+        }
+
+        /// <summary>
         /// Event raised when controller battery status is updated.
         /// Battery data is parsed from the same HID reports used for button monitoring.
         /// </summary>
@@ -1136,10 +1171,7 @@ namespace XboxGamingBarHelper.Labs
             }
 
             string buttonName = isLegionL ? "Legion L" : "Legion R";
-            string actionName = actionType == LegionButtonAction.XboxGuide ? "Xbox Guide" :
-                               actionType == LegionButtonAction.KeyboardShortcut ? $"Shortcut: {shortcutKeys}" :
-                               actionType == LegionButtonAction.RunCommand ? $"Command: {commandPath}" :
-                               "Focus GoTweaks";
+            string actionName = FormatLegionButtonActionName(actionType, shortcutKeys, commandPath);
             Logger.Info($"LegionButtonMonitor: Configured {buttonName} - Enabled: {enabled}, Action: {actionName}");
 
             // Notify so VIIPER can spin up / tear down its guide-only pad when the
@@ -1183,6 +1215,26 @@ namespace XboxGamingBarHelper.Labs
             // Guide mapping is removed).
             try { Program.NotifyGuideRouteChanged(); }
             catch (Exception ex) { Logger.Debug($"ConfigureButtonLongPress: NotifyGuideRouteChanged threw: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// SteamOS-style: while Legion L is held, RS moves the cursor and triggers click.
+        /// When enabled, the Hold remap row is reserved and long-press actions are ignored.
+        /// </summary>
+        public void ConfigureLegionLHoldForMouse(bool enabled)
+        {
+            legionLHoldForMouseEnabled = enabled;
+            if (enabled)
+            {
+                legionLLongEnabled = false;
+                legionLLongFired = false;
+                if (legionLHeld)
+                {
+                    legionLHeld = false;
+                    try { Program.EndLegionLHoldMouseSession(); } catch { }
+                }
+            }
+            Logger.Info($"LegionButtonMonitor: Legion L hold-for-mouse enabled={enabled}");
         }
 
         /// <summary>
@@ -2451,6 +2503,8 @@ namespace XboxGamingBarHelper.Labs
                 if (_physicalXInputSuppressed)
                 {
                     _frontButtonsCleared = true;
+                    try { Program.ReapplyLegionSteamFirmwareMappings(); }
+                    catch (Exception ex) { Logger.Debug($"ReapplyLegionSteamFirmwareMappings after front-button clear threw: {ex.Message}"); }
                 }
                 else
                 {
@@ -3551,9 +3605,11 @@ namespace XboxGamingBarHelper.Labs
                                 bool legionRRawPressed;
                                 if (hasTabletReportHeader)
                                 {
-                                    byte currentBtnValue = buffer[currentButtonByte];
-                                    legionLRawPressed = (currentBtnValue & LEGION_L_BIT) != 0;
-                                    legionRRawPressed = (currentBtnValue & LEGION_R_BIT) != 0;
+                                    if (!TryGetLegionFrontButtonRawState(buffer, bytesRead, out legionLRawPressed, out legionRRawPressed))
+                                    {
+                                        legionLRawPressed = false;
+                                        legionRRawPressed = false;
+                                    }
                                 }
                                 else
                                 {
@@ -3563,7 +3619,7 @@ namespace XboxGamingBarHelper.Labs
                                 }
 
                                 // Process Legion L button if configured (short OR long action)
-                                if (legionLEnabled || legionLLongEnabled)
+                                if (legionLEnabled || legionLLongEnabled || legionLHoldForMouseEnabled)
                                 {
                                     if (TryCommitDebouncedButtonState(
                                         legionLRawPressed,
@@ -4448,6 +4504,38 @@ namespace XboxGamingBarHelper.Labs
             bool shortEnabled = isLegionL ? legionLEnabled : legionREnabled;
             string name = isLegionL ? "Legion L" : "Legion R";
 
+            if (isLegionL && legionLHoldForMouseEnabled)
+            {
+                if (pressed)
+                {
+                    legionLHeld = true;
+                    legionLPressStartUtc = DateTime.UtcNow;
+                    legionLLongFired = false;
+                    try { Program.BeginLegionLHoldMouseSession(); } catch (Exception ex)
+                    {
+                        Logger.Error($"Legion L hold-for-mouse begin failed: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    var pressStart = legionLPressStartUtc;
+                    legionLHeld = false;
+                    try { Program.EndLegionLHoldMouseSession(); } catch (Exception ex)
+                    {
+                        Logger.Error($"Legion L hold-for-mouse end failed: {ex.Message}");
+                    }
+
+                    // Quick tap still fires the Click action (SteamOS: tap vs hold).
+                    if (shortEnabled
+                        && (DateTime.UtcNow - pressStart).TotalMilliseconds < LongPressThresholdMs)
+                    {
+                        ProcessButtonAction(name, true, legionLActionType, legionLShortcutKeys, legionLCommandPath);
+                        ProcessButtonAction(name, false, legionLActionType, legionLShortcutKeys, legionLCommandPath);
+                    }
+                }
+                return;
+            }
+
             if (!longEnabled)
             {
                 if (shortEnabled)
@@ -4639,21 +4727,8 @@ namespace XboxGamingBarHelper.Labs
                         break;
 
                     case LegionButtonAction.SteamMainMenu:
-                        try
-                        {
-                            onShortcutTriggered?.Invoke("Ctrl+1");
-                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Steam Main Menu (Ctrl+1)");
-                        }
-                        catch (Exception ex) { Logger.Error($"Steam Main Menu shortcut failed: {ex.Message}"); }
-                        break;
-
                     case LegionButtonAction.SteamQuickAccess:
-                        try
-                        {
-                            onShortcutTriggered?.Invoke("Ctrl+2");
-                            Logger.Info($"LegionButtonMonitor: {buttonName} pressed -> Steam Quick Access (Ctrl+2)");
-                        }
-                        catch (Exception ex) { Logger.Error($"Steam Quick Access shortcut failed: {ex.Message}"); }
+                        Logger.Debug($"LegionButtonMonitor: Steam BPM remap ({actionType}) removed — no action");
                         break;
                 }
             }

@@ -37,6 +37,7 @@ using XboxGamingBar.Data;
 using XboxGamingBar.Event;
 using XboxGamingBar.IPC;
 using XboxGamingBar.QuickSettings;
+using Shared.Constants;
 using Shared.Enums;
 
 namespace XboxGamingBar
@@ -99,6 +100,9 @@ namespace XboxGamingBar
                                 break;
                             case "Overlay":
                                 CyclePerformanceOverlay();
+                                break;
+                            case "OSDColor":
+                                CycleOSDColorPreset();
                                 break;
                             case "PowerMode":
                                 CyclePowerMode();
@@ -818,16 +822,39 @@ namespace XboxGamingBar
 
         private void CyclePerformanceOverlay()
         {
-            // (AMD Adrenalin overlay pass-through removed - RTSS only.)
+            if (osd != null)
             {
-                if (osd != null)
-                {
-                    int currentLevel = (int)osd.Value;
-                    int nextLevel = (currentLevel + 1) % 4;
-                    osd.SetValue(nextLevel);
-                    Logger.Info($"RTSS Performance Overlay cycled from {currentLevel} to {nextLevel}");
-                }
+                int currentLevel = (int)osd.Value;
+                int nextLevel = (currentLevel + 1) % (OverlayLevels.Max + 1);
+                osd.SetValue(nextLevel);
+                Logger.Info($"RTSS Performance Overlay cycled from {currentLevel} to {nextLevel}");
             }
+        }
+
+        private static readonly (string TextColor, string LabelColor, string Label)[] OsdColorPresets =
+        {
+            ("DYNAMIC", "DEFAULT", "Dynamic"),
+            ("FFFFFF", "FFFFFF", "White"),
+            ("00FF00", "00FF00", "Green"),
+            ("00FFFF", "00FFFF", "Cyan"),
+            ("FF5555", "FF5555", "Red"),
+        };
+
+        private int osdColorPresetIndex;
+
+        private void CycleOSDColorPreset()
+        {
+            osdColorPresetIndex = (osdColorPresetIndex + 1) % OsdColorPresets.Length;
+            var preset = OsdColorPresets[osdColorPresetIndex];
+            osdTextColor = preset.TextColor;
+            osdLabelColor = preset.LabelColor;
+            ApplicationData.Current.LocalSettings.Values[OsdColorPresetKey] = osdColorPresetIndex;
+            if (OSDTextColorDynamicCheckBox != null)
+                OSDTextColorDynamicCheckBox.IsChecked = preset.TextColor == "DYNAMIC";
+            SaveOSDConfigToStorage();
+            SendOSDConfigToHelper();
+            UpdateQuickSettingsTileStates();
+            Logger.Info($"OSD color preset cycled to {preset.Label}");
         }
 
         /// <summary>

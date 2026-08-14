@@ -89,9 +89,11 @@ function Test-RunningAsExe {
 $script:ScriptPath = Get-InstallerPath
 $PackageName = "PlayandBuildCustom.10365195AA1EC"
 
-# Processes that may block installation
+# Processes that may block installation (helper copies PresentMon to LocalCache and keeps it running)
 $BlockingProcesses = @(
     "XboxGamingBarHelper",
+    "PresentMon",
+    "XboxGamingBar",
     "GameBar",
     "GameBarFTServer",
     "GameBarPresenceWriter",
@@ -143,6 +145,91 @@ function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-CertificateThumbprint {
+    param([string]$Path)
+    $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($Path)
+    try { return $cert.Thumbprint.ToUpperInvariant() }
+    finally { $cert.Dispose() }
+}
+
+function Test-CertificateInLocalMachineStore {
+    param(
+        [string]$Thumbprint,
+        [string[]]$StoreNames = @("Root", "TrustedPeople")
+    )
+    $normalized = ($Thumbprint -replace '\s', '').ToUpperInvariant()
+    foreach ($storeName in $StoreNames) {
+        $storePath = "Cert:\LocalMachine\$storeName"
+        if (-not (Test-Path $storePath)) { continue }
+        $found = Get-ChildItem -Path $storePath -ErrorAction SilentlyContinue |
+            Where-Object { ($_.Thumbprint -replace '\s', '').ToUpperInvariant() -eq $normalized }
+        if ($found) { return $true }
+    }
+    return $false
+}
+
+function Test-SideloadCertificateTrusted {
+    param([string]$Thumbprint)
+    # MSIX sideload without Developer Mode needs the signing cert in Root at minimum.
+    return (Test-CertificateInLocalMachineStore -Thumbprint $Thumbprint -StoreNames @("Root"))
+}
+
+function Install-SideloadSigningCertificate {
+    param([string]$CertificatePath)
+    $stores = @(
+        @{ Label = "Root"; Location = "Cert:\LocalMachine\Root" },
+        @{ Label = "TrustedPeople"; Location = "Cert:\LocalMachine\TrustedPeople" }
+    )
+    $thumbprint = Get-CertificateThumbprint -Path $CertificatePath
+    foreach ($store in $stores) {
+        if (Test-CertificateInLocalMachineStore -Thumbprint $thumbprint -StoreNames @($store.Label)) {
+            Write-Info "Certificate already in LocalMachine\$($store.Label)"
+            continue
+        }
+        Import-Certificate -FilePath $CertificatePath -CertStoreLocation $store.Location | Out-Null
+        Write-Success "Certificate trusted in LocalMachine\$($store.Label)"
+    }
+}
+
+function Enable-AppPackageSideloading {
+    # Both keys are required on many Windows builds to bypass the legacy Store
+    # developer-license prompt for sideloaded MSIX (Developer Mode sets these).
+    $path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+    if (-not (Test-Path $path)) {
+        New-Item -Path $path -Force | Out-Null
+    }
+    Set-ItemProperty -Path $path -Name AllowAllTrustedApps -Value 1 -Type DWord -Force
+    Set-ItemProperty -Path $path -Name AllowDevelopmentWithoutDevLicense -Value 1 -Type DWord -Force
+    Write-Success "Sideloading enabled (AllowAllTrustedApps + AllowDevelopmentWithoutDevLicense)"
+}
+
+function Resolve-SigningCertificatePath {
+    param(
+        [string]$ScriptDir,
+        [System.IO.FileInfo]$MainPackage
+    )
+
+    $cer = Get-ChildItem -Path $ScriptDir -Filter "*.cer" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cer) { return $cer.FullName }
+
+    if ($MainPackage) {
+        try {
+            $sig = Get-AuthenticodeSignature -FilePath $MainPackage.FullName -ErrorAction Stop
+            if ($sig.SignerCertificate) {
+                $tempCer = Join-Path $env:TEMP ("GoTweaksSigning_{0}.cer" -f [guid]::NewGuid().ToString("N"))
+                Export-Certificate -Cert $sig.SignerCertificate -FilePath $tempCer | Out-Null
+                Write-Info "Extracted signing certificate from package"
+                return $tempCer
+            }
+        }
+        catch {
+            Write-Warn "Could not extract certificate from package: $($_.Exception.Message)"
+        }
+    }
+
+    return $null
 }
 
 function Request-Elevation {
@@ -199,32 +286,181 @@ function Get-RunningBlockers {
     return $running
 }
 
+function Stop-GoTweaksScheduledTask {
+    $taskPath = "\GoTweaks\"
+    $taskName = "GoTweaksHelper"
+    $schtasksName = "GoTweaks\GoTweaksHelper"
+
+    try {
+        & schtasks.exe /End /TN $schtasksName 2>$null | Out-Null
+        & schtasks.exe /Change /TN $schtasksName /DISABLE 2>$null | Out-Null
+    }
+    catch { }
+
+    try {
+        Stop-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+        Disable-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+    }
+    catch { }
+
+    Start-Sleep -Milliseconds 500
+}
+
+function Stop-ProcessesByPathPattern {
+    param([string[]]$Patterns)
+
+    $killed = @()
+    $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+    foreach ($proc in $processes) {
+        $path = $proc.ExecutablePath
+        if (-not $path) { continue }
+
+        foreach ($pattern in $Patterns) {
+            if ($path -like $pattern) {
+                try {
+                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+                    $killed += [System.IO.Path]::GetFileNameWithoutExtension($path)
+                }
+                catch { }
+                break
+            }
+        }
+    }
+
+    return ($killed | Select-Object -Unique)
+}
+
 function Stop-BlockingProcesses {
     param([switch]$Quiet)
 
+    Stop-GoTweaksScheduledTask
+
     $killed = @()
-    foreach ($procName in $BlockingProcesses) {
-        $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
-        if ($procs) {
-            foreach ($proc in $procs) {
+    for ($attempt = 0; $attempt -lt 3; $attempt++) {
+        foreach ($procName in $BlockingProcesses) {
+            try {
+                & taskkill.exe /F /T /IM "$procName.exe" 2>$null | Out-Null
+            }
+            catch { }
+
+            $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
+            if ($procs) {
+                foreach ($proc in $procs) {
+                    try {
+                        $proc | Stop-Process -Force -ErrorAction Stop
+                        $killed += $procName
+                    }
+                    catch {
+                        if (-not $Quiet) {
+                            Write-Warn "Could not stop $procName (PID: $($proc.Id))"
+                        }
+                    }
+                }
+            }
+        }
+
+        $killed += Stop-ProcessesByPathPattern -Patterns @(
+            "*\Packages\PlayandBuildCustom*\LocalCache\GoTweaks\*",
+            "*\WindowsApps\PlayandBuildCustom*\*XboxGamingBarHelper*",
+            "*\GoTweaks\Helper\*"
+        )
+
+        if ((Get-RunningBlockers).Count -eq 0) {
+            break
+        }
+
+        Start-Sleep -Milliseconds 1000
+    }
+
+    if ($killed.Count -gt 0) {
+        Start-Sleep -Milliseconds 2000
+    }
+
+    return ($killed | Select-Object -Unique)
+}
+
+function Remove-AllGoTweaksPackages {
+    $removed = @()
+    Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            Write-Info "Removing package: $($_.PackageFullName)"
+            Remove-AppxPackage -Package $_.PackageFullName -ErrorAction Stop
+            $removed += $_.PackageFullName
+        }
+        catch {
+            Write-Warn "Could not remove $($_.PackageFullName): $($_.Exception.Message)"
+        }
+    }
+
+    try {
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq $PackageName } |
+            ForEach-Object {
+                Write-Info "Removing provisioned package: $($_.PackageName)"
+                Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
+            }
+    }
+    catch { }
+
+    if ($removed.Count -gt 0) {
+        Start-Sleep -Seconds 2
+    }
+    return $removed
+}
+
+function Clear-GoTweaksLocalCache {
+    $cleared = $false
+    $packageRoots = Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA "Packages") -Filter "PlayandBuildCustom*" -ErrorAction SilentlyContinue
+    foreach ($root in $packageRoots) {
+        $pathsToClear = @(
+            (Join-Path $root.FullName "LocalCache\GoTweaks"),
+            (Join-Path $root.FullName "LocalCache\GoTweaks\Helper"),
+            (Join-Path $root.FullName "LocalCache\GoTweaks\Helper\PresentMon.exe")
+        )
+
+        foreach ($cachePath in $pathsToClear) {
+            if (-not (Test-Path $cachePath)) { continue }
+
+            $removedPath = $false
+            for ($attempt = 0; $attempt -lt 3 -and -not $removedPath; $attempt++) {
                 try {
-                    $proc | Stop-Process -Force -ErrorAction Stop
-                    $killed += $procName
+                    Remove-Item -Path $cachePath -Recurse -Force -ErrorAction Stop
+                    Write-Success "Cleared LocalCache: $cachePath"
+                    $cleared = $true
+                    $removedPath = $true
                 }
                 catch {
-                    if (-not $Quiet) {
-                        Write-Warn "Could not stop $procName (PID: $($proc.Id))"
+                    Stop-BlockingProcesses -Quiet | Out-Null
+                    try {
+                        $newName = "$(Split-Path $cachePath -Leaf).old.$([guid]::NewGuid().ToString('N'))"
+                        Rename-Item -Path $cachePath -NewName $newName -ErrorAction Stop
+                        Remove-Item -Path (Join-Path (Split-Path $cachePath -Parent) $newName) -Recurse -Force -ErrorAction Stop
+                        Write-Success "Renamed and cleared locked LocalCache: $cachePath"
+                        $cleared = $true
+                        $removedPath = $true
+                    }
+                    catch {
+                        if ($attempt -eq 2) {
+                            Write-Warn "Could not clear LocalCache ($cachePath): $($_.Exception.Message)"
+                        }
                     }
                 }
             }
         }
     }
+    return $cleared
+}
 
-    if ($killed.Count -gt 0) {
-        Start-Sleep -Milliseconds 1500
+function Prepare-GoTweaksForInstall {
+    param([switch]$RemoveExistingPackage)
+
+    Stop-BlockingProcesses -Quiet | Out-Null
+    if ($RemoveExistingPackage) {
+        Remove-AllGoTweaksPackages | Out-Null
     }
-
-    return ($killed | Select-Object -Unique)
+    Clear-GoTweaksLocalCache | Out-Null
+    Stop-BlockingProcesses -Quiet | Out-Null
+    Start-Sleep -Seconds 1
 }
 
 function Get-DependencyPackages {
@@ -330,15 +566,15 @@ $packageVersion = if ($MainPackage) { Get-PackageVersion -PackagePath $MainPacka
 Write-Host ""
 Write-Host "  =============================================" -ForegroundColor Cyan
 Write-Host "                                               " -ForegroundColor Cyan
-Write-Host "         GoTweaks Installer                    " -ForegroundColor White
+Write-Host "         GoTweaks S                                " -ForegroundColor White
 Write-Host "         Xbox Game Bar Widget                  " -ForegroundColor Gray
 Write-Host "                                               " -ForegroundColor Cyan
 Write-Host "         Version: $packageVersion                      " -ForegroundColor DarkGray
 Write-Host "                                               " -ForegroundColor Cyan
 Write-Host "  =============================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  This installer will set up GoTweaks on your system." -ForegroundColor Gray
-Write-Host "  GoTweaks provides TDP control, performance monitoring," -ForegroundColor Gray
+Write-Host "  This installer will set up GoTweaks S on your system." -ForegroundColor Gray
+Write-Host "  GoTweaks S provides TDP control, performance monitoring," -ForegroundColor Gray
 Write-Host "  and more for handheld gaming devices." -ForegroundColor Gray
 Write-Host ""
 
@@ -378,13 +614,13 @@ if (-not $MainPackage) {
 }
 Write-Success "Package: $($MainPackage.Name)"
 
-# Find certificate
-$Certificate = Get-ChildItem -Path $ScriptDir -Filter "*.cer" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($Certificate) {
-    Write-Success "Certificate: $($Certificate.Name)"
+# Resolve signing certificate (.cer beside installer, or extract from signed bundle)
+$script:SigningCertificatePath = Resolve-SigningCertificatePath -ScriptDir $ScriptDir -MainPackage $MainPackage
+if ($script:SigningCertificatePath) {
+    Write-Success "Certificate: $(Split-Path $script:SigningCertificatePath -Leaf)"
 }
 else {
-    Write-Info "No certificate file (may already be trusted)"
+    Write-Warn "No signing certificate found — sideload install will likely fail"
 }
 
 # Find dependencies - x64 only
@@ -483,9 +719,8 @@ if ($CleanInstall) {
         if ($CleanInstall) {
             Write-Info "Removing: v$($existingPkg.Version)"
             try {
-                Stop-BlockingProcesses -Quiet | Out-Null
-                Remove-AppxPackage -Package $existingPkg.PackageFullName -ErrorAction Stop
-                Write-Success "Removed existing package"
+                Prepare-GoTweaksForInstall -RemoveExistingPackage
+                Write-Success "Removed existing package and cleared LocalCache"
                 Start-Sleep -Seconds 2
             }
             catch {
@@ -510,50 +745,50 @@ else {
     }
 }
 
-# Phase 5: Install certificate
-Write-Step -Step 5 -Total 6 -Message "Installing certificate..."
+# Phase 5: Trust signing cert + enable sideloading (no Developer Mode UI required)
+Write-Step -Step 5 -Total 6 -Message "Preparing sideload trust..."
+
+try {
+    Enable-AppPackageSideloading
+}
+catch {
+    Write-Err "Failed to enable sideloading: $($_.Exception.Message)"
+    Exit-WithPause -ExitCode 1
+}
 
 if ($SkipCertificate) {
-    Write-Info "Skipped (--SkipCertificate)"
+    Write-Info "Certificate trust skipped (--SkipCertificate)"
 }
-elseif (-not $Certificate) {
-    Write-Info "No certificate file to install"
+elseif (-not $script:SigningCertificatePath) {
+    Write-Err "Cannot trust package: no .cer file and could not read cert from the bundle."
+    Write-Info "Enable Developer Mode, or rebuild so GoTweaksSigning.cer is bundled."
+    Exit-WithPause -ExitCode 1
 }
 else {
-    $signature = Get-AuthenticodeSignature -FilePath $MainPackage.FullName -ErrorAction SilentlyContinue
+    $thumbprint = Get-CertificateThumbprint -Path $script:SigningCertificatePath
 
-    if ($signature -and $signature.Status -eq "Valid") {
-        Write-Success "Package signature already trusted"
+    if (Test-SideloadCertificateTrusted -Thumbprint $thumbprint) {
+        Write-Success "Signing certificate already trusted (LocalMachine\Root)"
     }
     else {
-        $cert = Get-PfxCertificate -FilePath $Certificate.FullName
-        $existingCert = Get-ChildItem -Path "Cert:\LocalMachine\TrustedPeople" -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
-
-        if ($existingCert) {
-            Write-Success "Certificate already trusted"
-        }
-        else {
-            if (-not $Force) {
-                Write-Host ""
-                Write-Host "       A developer certificate needs to be installed." -ForegroundColor Yellow
-                Write-Host "       Subject: $($cert.Subject)" -ForegroundColor DarkGray
-                Write-Host ""
-                $response = Read-Host "       Install certificate? (Y/N)"
-                if ($response -ne 'Y' -and $response -ne 'y') {
-                    Write-Err "Certificate required. Installation cancelled."
-                    Exit-WithPause -ExitCode 1
-                }
-            }
-
-            $certResult = certutil.exe -addstore TrustedPeople $Certificate.FullName 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "Certificate installed"
-            }
-            else {
-                Write-Err "Failed to install certificate"
+        if (-not $Force) {
+            Write-Host ""
+            Write-Host "       Trust the package signing certificate in LocalMachine stores." -ForegroundColor Yellow
+            Write-Host "       Thumbprint: $thumbprint" -ForegroundColor DarkGray
+            Write-Host ""
+            $response = Read-Host "       Continue? (Y/N)"
+            if ($response -ne 'Y' -and $response -ne 'y') {
+                Write-Err "Certificate trust required. Installation cancelled."
                 Exit-WithPause -ExitCode 1
             }
+        }
+
+        try {
+            Install-SideloadSigningCertificate -CertificatePath $script:SigningCertificatePath
+        }
+        catch {
+            Write-Err "Failed to trust certificate: $($_.Exception.Message)"
+            Exit-WithPause -ExitCode 1
         }
     }
 }
@@ -567,12 +802,12 @@ $installSuccess = $false
 
 while ($retryCount -lt $maxRetries -and -not $installSuccess) {
     try {
-        Stop-BlockingProcesses -Quiet | Out-Null
+        Prepare-GoTweaksForInstall -RemoveExistingPackage:$CleanInstall
 
         # Install main package without forcing dependency reinstall
         # Windows will use already-installed shared dependencies (VCLibs etc.)
         # This avoids conflicts with other apps using those dependencies
-        Write-Info "Installing GoTweaks package..."
+        Write-Info "Installing GoTweaks S package..."
         Add-AppxPackage -Path $MainPackage.FullName `
             -ForceUpdateFromAnyVersion `
             -ErrorAction Stop
@@ -601,6 +836,21 @@ while ($retryCount -lt $maxRetries -and -not $installSuccess) {
             continue
         }
 
+        # Registration failure: PresentMon/helper often locks LocalCache\GoTweaks\Helper\PresentMon.exe
+        if (($errorMsg -match '0x80073CF6|80073CF6|0x80073D05|80073D05|could not be registered|application data') -and -not $script:RetriedRegistrationFailure) {
+            $script:RetriedRegistrationFailure = $true
+            Write-Warn "Registration failed — stopping GoTweaks/PresentMon, removing stale package, clearing LocalCache..."
+            try {
+                Prepare-GoTweaksForInstall -RemoveExistingPackage
+                Start-Sleep -Seconds 2
+            }
+            catch {
+                Write-Warn "Recovery cleanup failed: $($_.Exception.Message)"
+            }
+            $retryCount--
+            continue
+        }
+
         if ($retryCount -lt $maxRetries) {
             Write-Warn "Attempt $retryCount failed, retrying..."
             Start-Sleep -Seconds 2
@@ -609,9 +859,11 @@ while ($retryCount -lt $maxRetries -and -not $installSuccess) {
             Write-Err "Installation failed: $errorMsg"
             Write-Host ""
             Write-Host "       Troubleshooting:" -ForegroundColor Yellow
-            Write-Host "       - Close Xbox Game Bar completely (Win+G, then X)" -ForegroundColor Gray
-            Write-Host "       - Restart your computer and try again" -ForegroundColor Gray
-            Write-Host "       - If issue persists, run: Install.exe -CleanInstall" -ForegroundColor Gray
+            Write-Host "       - Close Xbox Game Bar (Win+G), then end XboxGamingBarHelper + PresentMon in Task Manager" -ForegroundColor Gray
+            Write-Host "       - Disable the GoTweaksHelper scheduled task (Task Scheduler -> GoTweaks folder)" -ForegroundColor Gray
+            Write-Host "       - Reboot the Legion Go, then run Install.exe -Force -CleanInstall as Admin" -ForegroundColor Gray
+            Write-Host "       - Use Install.exe, NOT Add-AppDevPackage.ps1 or double-clicking the .msixbundle" -ForegroundColor Gray
+            Write-Host "       - For details: Get-AppPackageLog | Select-Object -Last 1 | ForEach-Object { notepad `$_.FullName }" -ForegroundColor Gray
             Exit-WithPause -ExitCode 1
         }
     }
@@ -630,7 +882,7 @@ if ($installedPkg) {
     Write-Host "  Version: $($installedPkg.Version)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Press Win+G to open Xbox Game Bar" -ForegroundColor Cyan
-    Write-Host "  Then click the Widgets menu to add GoTweaks" -ForegroundColor Cyan
+    Write-Host "  Then click the Widgets menu to add GoTweaks S" -ForegroundColor Cyan
     Write-Host ""
 }
 else {

@@ -79,20 +79,23 @@ namespace XboxGamingBarHelper.RTSS
         public float FrametimeVariance => currentMaxFt - currentMinFt;  // Max-Min variance in ms
 
         // OSD configuration per level - stores which items are enabled
-        // Level 1 (Basic): Time, FPS, Battery - 3 columns
-        // Level 2 (Detailed): Time, FPS, Battery, CPU, GPU, Fan, FrametimeGraph - 1 column
-        // Level 3 (Full): All options - 1 column
+        // Level 1 (FPS Only): FPS - 1 column
+        // Level 2 (Basic): Time, FPS, Battery - 3 columns
+        // Level 3 (Detailed): extended stats - 1 column
+        // Level 4 (Full): All options - 1 column
         private Dictionary<int, HashSet<string>> osdLevelConfig = new Dictionary<int, HashSet<string>>
         {
-            { 1, new HashSet<string> { "Time", "FPS", "Battery" } },
-            { 2, new HashSet<string> { "Time", "FPS", "Battery", "CPU", "GPU", "FrameBudget", "Fan", "FrametimeGraph" } },
-            { 3, new HashSet<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "FrametimeGraph" } }
+            { 1, new HashSet<string> { "FPS" } },
+            { 2, new HashSet<string> { "Time", "FPS", "Battery" } },
+            { 3, new HashSet<string> { "Time", "FPS", "Battery", "CPU", "GPU", "FrameBudget", "Fan", "FrametimeGraph" } },
+            { 4, new HashSet<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "FrametimeGraph" } }
         };
         private Dictionary<int, string> osdCustomTags = new Dictionary<int, string>
         {
             { 1, "" },
             { 2, "" },
-            { 3, "" }
+            { 3, "" },
+            { 4, "" }
         };
 
         // Layout settings
@@ -117,20 +120,22 @@ namespace XboxGamingBarHelper.RTSS
         // Frametime graph pinned mode - always on its own row at the bottom, left-aligned
         private bool frametimeGraphPinned = false;
 
-        // Per-level columns (Basic=3, Detailed=1, Full=1)
+        // Per-level columns (FPS=1, Basic=3, Detailed=1, Full=1)
         private Dictionary<int, int> osdLevelColumns = new Dictionary<int, int>
         {
-            { 1, 3 },  // Basic: 3 columns
-            { 2, 1 },  // Detailed: 1 column (vertical list)
-            { 3, 1 }   // Full: 1 column (vertical list)
+            { 1, 1 },
+            { 2, 3 },
+            { 3, 1 },
+            { 4, 1 }
         };
 
         // Per-level item order
         private Dictionary<int, List<string>> osdLevelOrder = new Dictionary<int, List<string>>
         {
-            { 1, new List<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "TDPLimits", "FrametimeGraph" } },
+            { 1, new List<string> { "FPS" } },
             { 2, new List<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "TDPLimits", "FrametimeGraph" } },
-            { 3, new List<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "TDPLimits", "FrametimeGraph" } }
+            { 3, new List<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "TDPLimits", "FrametimeGraph" } },
+            { 4, new List<string> { "AppName", "Time", "FPS", "Battery", "ControllerBattery", "Memory", "VRAM", "CPU", "CPUClock", "GPU", "GPUClock", "FrameBudget", "Fan", "AutoTDP", "TDPLimits", "FrametimeGraph" } }
         };
 
         // Per-level, per-item label colors (e.g., osdItemLabelColors[1]["CPU"] = "FF0000")
@@ -138,7 +143,8 @@ namespace XboxGamingBarHelper.RTSS
         {
             { 1, new Dictionary<string, string>() },
             { 2, new Dictionary<string, string>() },
-            { 3, new Dictionary<string, string>() }
+            { 3, new Dictionary<string, string>() },
+            { 4, new Dictionary<string, string>() }
         };
 
         public RTSSManager(PerformanceManager performanceManager) : base()

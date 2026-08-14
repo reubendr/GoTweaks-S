@@ -378,6 +378,16 @@ public class LegionGoController : IDisposable
         return SendCommand(CreateCommand(0x00, 0x12, 0x0A, (byte)controller, 0x01, 0x11, 0x01, (byte)button, 0x01));
     }
 
+    /// <summary>
+    /// Disables firmware output for a button (map-to-none). Unlike
+    /// <see cref="ClearGamepadButtonMapping"/> which restores stock Win+D / Win+Tab.
+    /// </summary>
+    public bool DisableGamepadButtonMapping(GamepadButton button)
+    {
+        var controller = GetControllerForGamepadButton(button);
+        return SendCommand(CreateCommand(0x00, 0x12, 0x0A, (byte)controller, 0x01, 0x11, 0x01, (byte)button, 0x00));
+    }
+
     #endregion
 
     #region Touchpad Control

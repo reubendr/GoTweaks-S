@@ -332,6 +332,32 @@ namespace XboxGamingBar
         private const double TriggerSoftPressThreshold = 0.20;   // fire here (soft press)
         private const double TriggerSoftReleaseThreshold = 0.10; // re-arm below this
 
+        /// <summary>
+        /// While GoTweaks is the foreground Game Bar widget and the helper pipe is up, LT/RT
+        /// tab nav is delivered over WidgetTabNav (desktop on or off). The widget's analog poll
+        /// and key handlers must not also navigate — both paths firing skips two tabs per pull.
+        /// Also applies to the standalone desktop window when Desktop Controls is on.
+        /// Falls back to widget-side handlers if the helper pipe is down.
+        /// </summary>
+        private bool IsHelperOwnedTriggerTabNav()
+        {
+            if (!App.IsConnected) return false;
+            if (isForeground?.Value == true) return true;
+            if (legionDesktopControls?.Value != true) return false;
+            var cw = Window.Current?.CoreWindow;
+            return cw != null && cw.ActivationMode == CoreWindowActivationMode.ActivatedInForeground;
+        }
+
+        private bool TryTriggerTabNavigate(bool previous)
+        {
+            if (IsStickTriggerPreviewOpen) return false;
+            if ((DateTime.UtcNow - lastTriggerNavigateUtc) < TriggerNavigateDebounce) return false;
+            lastTriggerNavigateUtc = DateTime.UtcNow;
+            if (previous) NavigateToPreviousTab();
+            else NavigateToNextTab();
+            return true;
+        }
+
         internal void StartAnalogTriggerPoll()
         {
             if (analogTriggerPollTimer != null) return;
@@ -373,6 +399,13 @@ namespace XboxGamingBar
                     return;
                 }
 
+                if (IsHelperOwnedTriggerTabNav())
+                {
+                    ltAnalogPressed = false;
+                    rtAnalogPressed = false;
+                    return;
+                }
+
                 var pads = Windows.Gaming.Input.Gamepad.Gamepads;
                 if (pads.Count == 0) return;
                 // Merge all pads (virtual VIIPER pad + physical can coexist; whichever
@@ -401,11 +434,9 @@ namespace XboxGamingBar
             {
                 analogPressed = true;
                 if (!IsStickTriggerPreviewOpen && !navLatch
-                    && (DateTime.UtcNow - lastTriggerNavigateUtc) >= TriggerNavigateDebounce)
+                    && TryTriggerTabNavigate(navigate == NavigateToPreviousTab))
                 {
-                    navLatch = true; // consumed by this pull; the key handler skips too
-                    lastTriggerNavigateUtc = DateTime.UtcNow;
-                    navigate();
+                    navLatch = true;
                 }
             }
             else if (analogPressed && value < TriggerSoftReleaseThreshold)
@@ -498,6 +529,11 @@ namespace XboxGamingBar
             // press-edge should advance a tab. One press == one tab.
             if (e.Key == VirtualKey.GamepadLeftTrigger)
             {
+                if (IsHelperOwnedTriggerTabNav())
+                {
+                    e.Handled = true;
+                    return;
+                }
                 // While the VIIPER Sticks & Triggers live-preview panel is
                 // open the user is pulling the triggers ON PURPOSE to test
                 // their shaping curve — jumping to the previous tab would
@@ -506,24 +542,25 @@ namespace XboxGamingBar
                 // let the helper-side telemetry drive the visualizer.
                 if (!IsStickTriggerPreviewOpen
                     && !ltTriggerHeld && !e.KeyStatus.WasKeyDown
-                    && (DateTime.UtcNow - lastTriggerNavigateUtc) >= TriggerNavigateDebounce)
+                    && TryTriggerTabNavigate(previous: true))
                 {
                     ltTriggerHeld = true;
-                    lastTriggerNavigateUtc = DateTime.UtcNow;
-                    NavigateToPreviousTab();
                 }
                 e.Handled = true;
                 return;
             }
             else if (e.Key == VirtualKey.GamepadRightTrigger)
             {
+                if (IsHelperOwnedTriggerTabNav())
+                {
+                    e.Handled = true;
+                    return;
+                }
                 if (!IsStickTriggerPreviewOpen
                     && !rtTriggerHeld && !e.KeyStatus.WasKeyDown
-                    && (DateTime.UtcNow - lastTriggerNavigateUtc) >= TriggerNavigateDebounce)
+                    && TryTriggerTabNavigate(previous: false))
                 {
                     rtTriggerHeld = true;
-                    lastTriggerNavigateUtc = DateTime.UtcNow;
-                    NavigateToNextTab();
                 }
                 e.Handled = true;
                 return;
@@ -679,6 +716,17 @@ namespace XboxGamingBar
                 current = VisualTreeHelper.GetParent(current) as FrameworkElement;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Helper-&gt;widget path for LT/RT tab cycling when Desktop Controls owns the triggers.
+        /// </summary>
+        internal void HandleWidgetTabNavFromHelper(string direction)
+        {
+            if (string.Equals(direction, "Previous", StringComparison.OrdinalIgnoreCase))
+                TryTriggerTabNavigate(previous: true);
+            else if (string.Equals(direction, "Next", StringComparison.OrdinalIgnoreCase))
+                TryTriggerTabNavigate(previous: false);
         }
 
         private void NavigateToPreviousTab()
@@ -903,6 +951,10 @@ namespace XboxGamingBar
                     pendingEntryAnchor = true;
                     return;
                 }
+
+                App.RegisterActiveGamingWidget(this);
+                SyncSharedStorageToUi(pushToHelper: false);
+
                 Logger.Info($"Window activated ({args.WindowActivationState}); anchoring focus to active nav item");
                 _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => FocusActiveNavItem());
             }

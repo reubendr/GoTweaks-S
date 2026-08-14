@@ -37,6 +37,7 @@ using XboxGamingBar.Data;
 using XboxGamingBar.Event;
 using XboxGamingBar.IPC;
 using XboxGamingBar.QuickSettings;
+using Shared.Constants;
 using Shared.Enums;
 using Shared.Input;
 
@@ -93,7 +94,7 @@ namespace XboxGamingBar
         // Sticky TDP settings (per-profile)
         public bool StickyTDPEnabled { get; set; } = true;
         public int StickyTDPInterval { get; set; } = 5;
-        // Overlay Level (0=Off, 1-4 for RTSS/AMD)
+        // Overlay Level (0=Off, 1=FPS only, 2=Basic, 3=Detailed, 4=Full)
         public int OverlayLevel { get; set; } = 0;
 
         public PerformanceProfile Clone()
@@ -914,6 +915,8 @@ namespace XboxGamingBar
 
         // Desktop controls preset (synced from helper for hotkey support)
         private readonly LegionDesktopControlsProperty legionDesktopControls;
+        private readonly LegionDesktopAutoDisableInGameProperty legionDesktopAutoDisableInGame;
+        private readonly LegionLHoldForMouseProperty legionLHoldForMouse;
 
         // Controller battery properties (from HID input reports)
         private readonly ControllerBatteryLeftProperty controllerBatteryLeft;
@@ -1110,6 +1113,9 @@ namespace XboxGamingBar
         private ControllerProfile gameControllerProfile = new ControllerProfile();
         private bool isLoadingControllerProfile = false;
         private bool isSwitchingControllerProfile = false;
+        private bool isReloadingSharedStorage = false;
+        private DispatcherTimer sharedStorageSyncDebounceTimer;
+        private string pendingSharedStorageSyncReason;
         private DateTime lastProfileApplyTime = DateTime.MinValue; // Prevents duplicate sends from queued UI events
         private int profileSwitchEpoch = 0; // Incremented on each LoadProfileSettings; used to skip stale deferred callbacks
         private string lastSentGamepadMappingsJson = null; // Tracks last sent mappings to avoid duplicates
@@ -1647,6 +1653,8 @@ namespace XboxGamingBar
 
             // Desktop controls preset (synced from helper for hotkey)
             legionDesktopControls = new LegionDesktopControlsProperty(LegionDesktopControlsToggle, this);
+            legionDesktopAutoDisableInGame = new LegionDesktopAutoDisableInGameProperty(LegionDesktopAutoDisableInGameToggle, this);
+            legionLHoldForMouse = new LegionLHoldForMouseProperty(LegionLHoldForMouseToggle, this);
 
             // Controller battery properties (read-only)
             controllerBatteryLeft = new ControllerBatteryLeftProperty();
@@ -2076,6 +2084,8 @@ namespace XboxGamingBar
                 tdpBoostSPPT,
                 tdpBoostFPPT,
                 legionDesktopControls,
+                legionDesktopAutoDisableInGame,
+                legionLHoldForMouse,
                 legionJoystickAsMouseMode,
                 legionJoystickMouseSens,
                 controllerBatteryLeft,
@@ -2938,7 +2948,7 @@ namespace XboxGamingBar
         // Go 1 template exists; Go S is a one-piece device and uses its static outline.
         // Starts at -1 (nothing applied) so the first VID:PID always populates the art,
         // including the Device Layout images which have no XAML default source.
-        private int deviceArtVariant = -1;
+        private int deviceArtVariant = 2;
 
         // Label -> MIT glyph asset (Assets/ButtonGlyphs/*.svg) for the remap dropdowns.
         // Mouse targets and "Disabled" stay text-only (no shippable glyph).
@@ -3098,6 +3108,31 @@ namespace XboxGamingBar
             }
 
             UpdateConsolidatedRemapEditor();
+            UpdateRemapLayoutImages();
+        }
+
+        private void UpdateRemapLayoutImages(string prefix = null)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(prefix))
+                    prefix = deviceArtVariant == 1 ? "LegionGoS" : deviceArtVariant == 0 ? "LegionGo1" : "LegionGo2";
+
+                if (RemapLayoutFrontImage != null)
+                {
+                    RemapLayoutFrontImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Front.png"));
+                }
+                if (RemapLayoutBackImage != null)
+                {
+                    RemapLayoutBackImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
+                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Back.png"));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"UpdateRemapLayoutImages failed: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -3372,7 +3407,7 @@ namespace XboxGamingBar
                     }
                     if (desc == null) continue;
                     var delName = name;
-                    AddRemapChip(name, desc, i, () => ResetLegionButtonMapping(delName));
+                    AddRemapChip(LegionButtonLabels.GetDisplayName(name), desc, i, () => ResetLegionButtonMapping(delName));
                 }
 
                 // Gamepad-button remaps (from the gamepad editor's own store) share the chips.
@@ -3851,6 +3886,7 @@ namespace XboxGamingBar
                 lastDeviceGlyphKey = null;   // force the middle glyph to re-render
 
                 string prefix = variant == 1 ? "LegionGoS" : variant == 0 ? "LegionGo1" : "LegionGo2";
+                UpdateRemapLayoutImages(prefix);
                 if (LeftControllerWatermarkImage != null)
                     LeftControllerWatermarkImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
                         new Uri($"ms-appx:///Assets/{prefix}ControllerLeft.png"));
@@ -3858,12 +3894,6 @@ namespace XboxGamingBar
                     RightControllerWatermarkImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
                         new Uri($"ms-appx:///Assets/{prefix}ControllerRight.png"));
 
-                if (DeviceLayoutFrontImage != null)
-                    DeviceLayoutFrontImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
-                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Front.png"));
-                if (DeviceLayoutBackImage != null)
-                    DeviceLayoutBackImage.Source = new Windows.UI.Xaml.Media.Imaging.BitmapImage(
-                        new Uri($"ms-appx:///Assets/DeviceViews/{prefix}_Back.png"));
                 RefreshLegionDeviceGlyph();
                 Logger.Info($"Device art variant set to {prefix} from VID:PID {vidPid}");
             }
@@ -4657,6 +4687,7 @@ namespace XboxGamingBar
             // Register this instance as the active widget to handle AppService messages
             Logger.Info("Registering this GamingWidget instance as the active widget.");
             App.RegisterActiveGamingWidget(this);
+            App.RegisterGamingWidgetInstance(this);
             Logger.Info("GamingWidget instance registered as active.");
 
             // Re-bind this instance's pipe handlers unconditionally, even if the pipe is
@@ -4852,6 +4883,8 @@ namespace XboxGamingBar
                     UpdateProfileDisplay();
                     RefreshLegionEnhancedRemapUi();
                     Logger.Info("Profile display updated after sync - legionGoDetected=" + (legionGoDetected?.Value.ToString() ?? "null"));
+
+                    SyncSharedStorageToUi(pushToHelper: false);
 
                     // Clear initial sync flag - profile is loaded and applied, user changes should now save
                     // Add a small delay to let any pending ValueChanged events settle first

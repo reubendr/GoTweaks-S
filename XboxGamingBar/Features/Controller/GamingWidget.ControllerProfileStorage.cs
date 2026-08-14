@@ -152,6 +152,9 @@ namespace XboxGamingBar
             }
 
             Logger.Info($"Saved controller profile: {profileName}, LightMode={profile.LightMode}, Color=#{profile.LightColorR:X2}{profile.LightColorG:X2}{profile.LightColorB:X2}, Brightness={profile.LightBrightness}");
+
+            if (!isReloadingSharedStorage)
+                App.NotifyPeerGamingWidgetsToSync(this, $"controller profile {profileName}");
         }
 
         private ButtonMapping LoadButtonMapping(ApplicationDataContainer container, string key)
@@ -1203,7 +1206,7 @@ namespace XboxGamingBar
             _buttonKeyboardKeys[buttonName] = new List<int>(keys ?? new List<int>());
         }
 
-        private void ApplyControllerProfile(ControllerProfile profile)
+        private void ApplyControllerProfile(ControllerProfile profile, bool pushToHelper = true)
         {
             isLoadingControllerProfile = true;
 
@@ -1373,14 +1376,10 @@ namespace XboxGamingBar
                         LegionRightTriggerEndValue.Text = $"{profile.RightTriggerEnd}%";
                 }
 
-                // Apply joystick as mouse settings.
-                // Joystick-as-mouse (right stick -> mouse) is a DESKTOP-CONTROLS-only feature
-                // and is a LATCHED firmware mode (persists across reboot until explicitly
-                // disabled). It must never come from a non-Desktop profile: a leaked value in
-                // the Global/per-game profile re-enabled it on every apply/startup with no way
-                // to turn it off ("joy-to-mouse on permanently" - field report 0.3.2730). Force
-                // 0 for any non-Desktop profile so a stale/leaked value is actively cleared.
-                int effectiveJoyMouse = profile.DesktopControlsEnabled ? profile.JoystickAsMouseMode : 0;
+                // Apply joystick as mouse settings. While Desktop Controls overlay is active,
+                // RS mouse is forced on (admin trackball). When it is off, honour the saved
+                // Global/per-game JoystickAsMouseMode (legacy firmware path — 0/LS/RS).
+                int effectiveJoyMouse = isDesktopModeActive ? 2 : profile.JoystickAsMouseMode;
                 if (LegionJoystickAsMouseComboBox != null)
                 {
                     // Set UI first
@@ -1388,11 +1387,9 @@ namespace XboxGamingBar
                     {
                         LegionJoystickAsMouseComboBox.SelectedIndex = effectiveJoyMouse;
                     }
-                    // Show/hide sensitivity grid based on mode
+                    // Sensitivity grid lives in Desktop & mouse — always visible there.
                     if (LegionJoystickMouseSensGrid != null)
-                        LegionJoystickMouseSensGrid.Visibility = effectiveJoyMouse > 0
-                            ? Windows.UI.Xaml.Visibility.Visible
-                            : Windows.UI.Xaml.Visibility.Collapsed;
+                        LegionJoystickMouseSensGrid.Visibility = Windows.UI.Xaml.Visibility.Visible;
                     // Send value to helper (SetValue instead of SetValueSilent)
                     legionJoystickAsMouseMode?.SetValue(effectiveJoyMouse);
                 }
@@ -1484,14 +1481,17 @@ namespace XboxGamingBar
                 // Use 2 second window since HID commands take ~1.5s to complete (50ms per button × ~30 buttons)
                 lastProfileApplyTime = DateTime.Now;
 
-                // Send button mappings to helper
-                SendButtonMappingsToHelper(profile);
+                if (pushToHelper)
+                {
+                    // Send button mappings to helper
+                    SendButtonMappingsToHelper(profile);
 
-                // Send controller settings to helper (gyro, deadzone, vibration, triggers)
-                SendControllerSettingsToHelper(profile);
+                    // Send controller settings to helper (gyro, deadzone, vibration, triggers)
+                    SendControllerSettingsToHelper(profile);
 
-                // Send lighting settings to helper
-                SendLightingToHelper(profile);
+                    // Send lighting settings to helper
+                    SendLightingToHelper(profile);
+                }
 
                 // Re-evaluate enhanced remap UI after profile/UI values settle.
                 // This avoids startup ordering issues where improved input state arrives
@@ -1660,7 +1660,7 @@ namespace XboxGamingBar
             UpdateControllerSliderDisplays(sender);
 
             // Don't save during profile loading, switching, widget unloading, or helper sync
-            if (isLoadingControllerProfile || isSwitchingControllerProfile || isUnloading || isApplyingHelperUpdate)
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || isUnloading || isApplyingHelperUpdate || isReloadingSharedStorage)
                 return;
 
             // Skip if a profile was just applied (prevents duplicate sends from queued UI events)
@@ -1683,7 +1683,7 @@ namespace XboxGamingBar
             // Update slider value displays immediately (keeps the UI responsive during drag)
             UpdateControllerSliderDisplays(sender);
 
-            if (isLoadingControllerProfile || isSwitchingControllerProfile || isUnloading || isApplyingHelperUpdate)
+            if (isLoadingControllerProfile || isSwitchingControllerProfile || isUnloading || isApplyingHelperUpdate || isReloadingSharedStorage)
                 return;
             if ((DateTime.Now - lastProfileApplyTime).TotalMilliseconds < 2000)
                 return;
@@ -1826,23 +1826,149 @@ namespace XboxGamingBar
         {
             try
             {
-                var profile = (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
-                    ? gameControllerProfile
-                    : globalControllerProfile;
+                Logger.Info("Re-pushing active controller profile to helper after pipe connect (reload from storage first)");
+                ReloadActiveControllerProfileFromStorage(pushToHelper: false);
+
+                var profile = isDesktopModeActive ? desktopControllerProfile
+                    : (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
+                        ? gameControllerProfile
+                        : globalControllerProfile;
                 if (profile == null) return;
 
-                Logger.Info("Re-pushing active controller profile to helper after pipe connect (recovery from cold-start race)");
                 SendButtonMappingsToHelper(profile, force: true);
-                // force: the widget's cached values equal the profile's, so plain
-                // SetValue would equality-skip and nothing would reach a restarted
-                // helper (verified 2026-07-30 — recovery previously depended solely
-                // on the helper's own global.xml restore).
                 SendControllerSettingsToHelper(profile, force: true);
                 SendLightingToHelper(profile, force: true);
             }
             catch (Exception ex)
             {
                 Logger.Warn($"ResendActiveControllerProfileToHelper failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Reloads controller remaps and related Legion settings from the shared
+        /// LocalSettings store into this GamingWidget instance. The Game Bar widget
+        /// and desktop app are separate instances — edits in one must appear in the
+        /// other when it becomes active.
+        /// </summary>
+        internal void SyncSharedStorageToUi(bool pushToHelper = false)
+        {
+            if (isUnloading || isSwitchingControllerProfile) return;
+
+            try
+            {
+                isReloadingSharedStorage = true;
+                SyncDesktopModeStateFromStorage();
+                ReloadActiveControllerProfileFromStorage(pushToHelper);
+
+                // Labs controls exist in XAML even before the Labs tab is first opened.
+                if (LegionLActionComboBox != null)
+                {
+                    LoadLegionRemapSettings();
+                    LoadScrollRemapSettings();
+                    if (pushToHelper && App.IsConnected)
+                    {
+                        ApplyLegionRemapSettingsToHelper();
+                        ApplyScrollRemapSettingsToHelper();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SyncSharedStorageToUi failed: {ex.Message}");
+            }
+            finally
+            {
+                isReloadingSharedStorage = false;
+            }
+        }
+
+        /// <summary>
+        /// Called on peer GamingWidget instances when shared LocalSettings change.
+        /// </summary>
+        internal void RequestSyncSharedStorageFromPeer(string reason = null)
+        {
+            if (isUnloading || isReloadingSharedStorage || Dispatcher == null)
+                return;
+
+            // Coalesce bursts (profile save writes many keys; helper may forward many Sets).
+            if (sharedStorageSyncDebounceTimer == null)
+            {
+                sharedStorageSyncDebounceTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(150)
+                };
+                sharedStorageSyncDebounceTimer.Tick += (s, e) =>
+                {
+                    sharedStorageSyncDebounceTimer.Stop();
+                    if (isUnloading || isReloadingSharedStorage)
+                        return;
+
+                    try
+                    {
+                        Logger.Info($"Shared storage sync reload ({pendingSharedStorageSyncReason ?? "debounced"})");
+                        SyncSharedStorageToUi(pushToHelper: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn($"Shared storage sync reload failed: {ex.Message}");
+                    }
+                    finally
+                    {
+                        pendingSharedStorageSyncReason = null;
+                    }
+                };
+            }
+
+            pendingSharedStorageSyncReason = reason ?? pendingSharedStorageSyncReason ?? "shared storage changed";
+            sharedStorageSyncDebounceTimer.Stop();
+            sharedStorageSyncDebounceTimer.Start();
+        }
+
+        private void SyncDesktopModeStateFromStorage()
+        {
+            try
+            {
+                var settings = ApplicationData.Current.LocalSettings;
+                bool shouldBeActive = settings.Values.TryGetValue(DesktopModeActiveKey, out var v) && v is bool b && b;
+                if (shouldBeActive == isDesktopModeActive) return;
+
+                if (LegionDesktopControlsToggle != null)
+                {
+                    LegionDesktopControlsToggle.Toggled -= LegionDesktopControls_Toggled;
+                    try { LegionDesktopControlsToggle.IsOn = shouldBeActive; }
+                    finally { LegionDesktopControlsToggle.Toggled += LegionDesktopControls_Toggled; }
+                }
+
+                ApplyDesktopModeState(shouldBeActive, persistActive: false);
+                SyncDesktopJoystickMouseMode(shouldBeActive);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SyncDesktopModeStateFromStorage failed: {ex.Message}");
+            }
+        }
+
+        private void ReloadActiveControllerProfileFromStorage(bool pushToHelper)
+        {
+            if (isSwitchingControllerProfile) return;
+
+            if (isDesktopModeActive)
+            {
+                LoadControllerProfileFromStorage(DesktopProfileName, desktopControllerProfile);
+                ApplyControllerProfile(desktopControllerProfile, pushToHelper);
+                return;
+            }
+
+            if (LegionControllerProfileToggle?.IsOn == true && HasValidGame(currentGameName))
+            {
+                LoadControllerProfileFromStorage($"Game_{currentGameName}", gameControllerProfile);
+                ApplyControllerProfile(gameControllerProfile, pushToHelper);
+            }
+            else
+            {
+                LoadControllerProfileFromStorage("Global", globalControllerProfile);
+                ApplyControllerProfile(globalControllerProfile, pushToHelper);
             }
         }
 

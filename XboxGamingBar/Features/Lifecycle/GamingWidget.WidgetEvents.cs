@@ -72,6 +72,9 @@ namespace XboxGamingBar
                 // user already interacting. Deferred so layout has settled first.
                 if (isVisible)
                 {
+                    App.RegisterActiveGamingWidget(this);
+                    SyncSharedStorageToUi(pushToHelper: false);
+
                     // Re-paint the Legion controller battery/connection/VID:PID display on every
                     // open. The underlying property values are usually already correct by now (the
                     // real battery reading typically arrives 180ms-1s after the widget's first

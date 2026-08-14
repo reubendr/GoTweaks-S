@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using NLog;
 using Shared.Data;
 using Shared.Utilities;
+using Shared.Constants;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -84,17 +85,15 @@ namespace XboxGamingBar
                 if (PerformanceOverlayComboBox == null) return;
                 isLoadingPerformanceOverlaySetting = true;
                 var settings = ApplicationData.Current.LocalSettings;
+                MigrateOverlayLevelsV2IfNeeded(settings);
                 if (settings.Values.TryGetValue("PerformanceOverlayLevel", out object val) && val is int level)
                 {
+                    level = Math.Max(0, Math.Min(level, OverlayLevels.Max));
                     if (level >= 0 && level < PerformanceOverlayComboBox.Items.Count)
                     {
                         PerformanceOverlayComboBox.SelectedIndex = level;
-                        // Also set the osd property value directly to avoid debounce delay
-                        // This ensures Quick Settings and helper have the correct value immediately
                         if (osd != null)
-                        {
                             osd.SetValue(level);
-                        }
                         Logger.Debug($"Loaded PerformanceOverlayLevel: {level}");
                     }
                 }
@@ -129,14 +128,47 @@ namespace XboxGamingBar
         {
             if (PerformanceOverlaySlider != null && PerformanceOverlayComboBox != null)
             {
-                // Sync the ComboBox selection when slider value changes
-                // (e.g., from property loading or helper updates)
                 int newIndex = (int)Math.Round(e.NewValue);
+                newIndex = Math.Max(0, Math.Min(newIndex, OverlayLevels.Max));
 
                 if (PerformanceOverlayComboBox.SelectedIndex != newIndex)
                 {
                     PerformanceOverlayComboBox.SelectedIndex = newIndex;
                 }
+            }
+        }
+
+        private static void MigrateOverlayLevelsV2IfNeeded(Windows.Storage.ApplicationDataContainer settings)
+        {
+            if (settings.Values.ContainsKey(OverlayLevels.MigrationKey))
+                return;
+
+            if (settings.Values.TryGetValue("PerformanceOverlayLevel", out object val) && val is int level)
+                settings.Values["PerformanceOverlayLevel"] = OverlayLevels.MigrateSavedLevel(level);
+
+            ShiftOsdStorageLevel(settings, 3, 4);
+            ShiftOsdStorageLevel(settings, 2, 3);
+            ShiftOsdStorageLevel(settings, 1, 2);
+
+            settings.Values["OSD_L1_FPS"] = true;
+            settings.Values["OSD_L1_Time"] = false;
+            settings.Values["OSD_L1_Battery"] = false;
+            settings.Values["OSD_L1_Columns"] = 1;
+            settings.Values["OSD_L1_Order"] = "FPS";
+
+            settings.Values[OverlayLevels.MigrationKey] = true;
+            Logger.Info("Migrated overlay levels to v2 (FPS Only inserted at level 1)");
+        }
+
+        private static void ShiftOsdStorageLevel(Windows.Storage.ApplicationDataContainer settings, int fromLevel, int toLevel)
+        {
+            string prefix = $"OSD_L{fromLevel}_";
+            string newPrefix = $"OSD_L{toLevel}_";
+            var keys = settings.Values.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var key in keys)
+            {
+                settings.Values[newPrefix + key.Substring(prefix.Length)] = settings.Values[key];
+                settings.Values.Remove(key);
             }
         }
 

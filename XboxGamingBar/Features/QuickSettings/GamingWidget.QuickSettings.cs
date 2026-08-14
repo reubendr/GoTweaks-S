@@ -125,7 +125,8 @@ namespace XboxGamingBar
         private DispatcherTimer screenSaverCountdownTimer;
         private const string QuickMetricsEnabledKey = "QS_MetricsEnabled";
         private const string PanelBrightnessShowKey = "QS_ShowBrightness";
-        private bool panelBrightnessShow = false;  // hidden by default; revealed via Customize
+        private const string OsdColorPresetKey = "QS_OSDColorPreset";
+        private bool panelBrightnessShow = true;  // visible by default in Quick Settings
         private const string QuickMetricsSelectionKey = "QS_MetricsSelection";
         private const int MaxSelectedMetrics = 6;
 
@@ -348,6 +349,7 @@ namespace XboxGamingBar
             // Row 5 - Scaling/Quality
             AddTileDefinition("LosslessScaling", "Lossless", "\uEA5F", order: order++);
             AddTileDefinition("Overlay", "Overlay", "\uE9D9", order: order++);
+            AddTileDefinition("OSDColor", "OSD Color", "\uE790", order: order++);
 
             // Row 6 - Input & Interaction
             AddTileDefinition("ScreenSaver", "Idle Screen Off", "\uE7E8", order: order++);
@@ -566,11 +568,15 @@ namespace XboxGamingBar
                     quickMetricsEnabled = metricsEnabled;
                 }
 
-                // Load panel brightness slider show preference (hidden by default)
+                // Load panel brightness slider show preference (shown by default)
                 if (settings.Values.TryGetValue(PanelBrightnessShowKey, out object pbShowVal) && pbShowVal is bool pbShow)
-                {
                     panelBrightnessShow = pbShow;
-                }
+                else
+                    panelBrightnessShow = true;
+
+                if (settings.Values.TryGetValue(OsdColorPresetKey, out object osdColorVal) && osdColorVal is int osdColorIdx)
+                    osdColorPresetIndex = Math.Max(0, Math.Min(osdColorIdx, OsdColorPresets.Length - 1));
+
                 if (PanelBrightnessShowToggle != null) PanelBrightnessShowToggle.IsOn = panelBrightnessShow;
                 UpdatePanelBrightnessRowVisibility();
 

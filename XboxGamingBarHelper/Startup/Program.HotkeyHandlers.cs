@@ -1,6 +1,7 @@
 ﻿using NLog;
 using Shared.Constants;
 using Shared.Data;
+using Shared.Input;
 using Shared.IPC;
 using System;
 using System.Collections.Generic;
@@ -197,6 +198,76 @@ namespace XboxGamingBarHelper
             }
         }
 
+        private static bool IsGoTweaksWidgetForeground()
+            => settingsManager?.IsForeground?.Value == true;
+
+        private static bool IsGoTweaksUiForeground()
+            => IsGoTweaksWidgetForeground() || Windows.User32.IsGoTweaksDesktopWindowForeground();
+
+        /// <summary>
+        /// While GoTweaks is the foreground widget, LT/RT are routed here instead of the
+        /// widget's analog poll + key handlers (single tab per pull). Desktop Controls off:
+        /// both triggers tab-nav. Desktop Controls on: LT tab-nav; RT tab-nav at rest, but
+        /// left-clicks while the user is actively moving the desktop cursor.
+        /// </summary>
+        private static bool TryHandleWidgetForegroundTrigger(Labs.LegionButtonEdgeEventArgs e)
+        {
+            if (legionManager == null || !IsGoTweaksUiForeground() || !IsPipeConnected)
+                return false;
+
+            if (e.Button == Labs.LegionInputButton.LeftTrigger)
+            {
+                if (e.Pressed)
+                    FireWidgetTabNavToWidget("Previous");
+                return true;
+            }
+
+            if (e.Button == Labs.LegionInputButton.RightTrigger)
+            {
+                if (legionManager.LegionDesktopControls.Value
+                    && IsDesktopMouseCursorPriorityActive())
+                {
+                    if (legionManager.TryGetMouseClickRemap(e.Button, out int mouseButton))
+                        InjectMouseButtonClick(mouseButton, e.Pressed);
+                }
+                else if (e.Pressed)
+                {
+                    FireWidgetTabNavToWidget("Next");
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Helper-&gt;widget: LT/RT tab nav while Desktop Controls remaps would otherwise
+        /// inject mouse clicks and starve the widget's trigger handlers.
+        /// </summary>
+        private static void FireWidgetTabNavToWidget(string direction)
+        {
+            try
+            {
+                if (!IsPipeConnected)
+                {
+                    Logger.Debug($"Widget tab nav '{direction}' skipped — widget not connected");
+                    return;
+                }
+                var msg = new Shared.IPC.PipeMessage
+                {
+                    Command = Shared.Enums.Command.Set,
+                    Function = Shared.Enums.Function.WidgetTabNav,
+                    Content = direction
+                };
+                SendPipeMessage(msg);
+                Logger.Debug($"Widget tab nav -> {direction}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"FireWidgetTabNavToWidget error: {ex.Message}");
+            }
+        }
+
         /// <summary>Helper-&gt;widget: tell the widget a tile combo fired so it runs the tile action.</summary>
         private static void FireTileHotkeyToWidget(string tileId, string name)
         {
@@ -240,6 +311,14 @@ namespace XboxGamingBarHelper
                     {
                         Logger.Info($"Legion button {e.Button} -> system action {sysAction}");
                         Task.Run(() => ExecuteSystemAction(sysAction, null, $"legion-button-{e.Button}"));
+                    }
+                    if (TryHandleWidgetForegroundTrigger(e))
+                    {
+                        // LT/RT handled for foreground widget (tab nav and/or RT click).
+                    }
+                    else if (legionManager.TryGetMouseClickRemap(e.Button, out int mouseButton))
+                    {
+                        InjectMouseButtonClick(mouseButton, e.Pressed);
                     }
                     if (legionManager.TryGetScrollRepeatRemap(e.Button, out int scrollCode))
                     {
@@ -498,9 +577,9 @@ namespace XboxGamingBarHelper
                     return;
                 }
 
-                // Cycle through levels: 0 -> 1 -> 2 -> 3 -> 0
+                // Cycle through levels: 0 -> 1 -> 2 -> 3 -> 4 -> 0
                 int currentLevel = onScreenDisplay.Value;
-                int newLevel = (currentLevel + 1) % 4;  // 0, 1, 2, 3, then back to 0
+                int newLevel = (currentLevel + 1) % (OverlayLevels.Max + 1);
 
                 onScreenDisplay.SetValue(newLevel);
                 Logger.Info($"ToggleOSD: OSD level changed from {currentLevel} to {newLevel}");
@@ -613,22 +692,8 @@ namespace XboxGamingBarHelper
                     // 1. Set Right Stick as Mouse (mode 2)
                     legionManager.LegionJoystickAsMouseMode.ForceSetValue(2);
 
-                    // 2. Apply desktop button mappings JSON
-                    // Format: {"ButtonName":{"Type":X,"GamepadAction":Y,"KeyboardKeys":[...],"MouseButton":Z},...}
-                    // Desktop Controls preset: DPAD/LS→Arrows, LSClick→Win, A→Enter, B→Esc, LB→LClick, LT→RClick
-                    string desktopMappingsJson = @"{
-                        ""DPadUp"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[82],""MouseButton"":0},
-                        ""DPadDown"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[81],""MouseButton"":0},
-                        ""DPadLeft"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[80],""MouseButton"":0},
-                        ""DPadRight"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[79],""MouseButton"":0},
-                        ""LSUp"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[82],""MouseButton"":0},
-                        ""LSDown"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[81],""MouseButton"":0},
-                        ""LSClick"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[227],""MouseButton"":0},
-                        ""A"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[40],""MouseButton"":0},
-                        ""B"":{""Type"":1,""GamepadAction"":0,""KeyboardKeys"":[41],""MouseButton"":0},
-                        ""LB"":{""Type"":2,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LT"":{""Type"":2,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":1}
-                    }";
+                    // 2. Apply desktop button mappings JSON (Steam Input desktop layout)
+                    string desktopMappingsJson = DesktopControlsPreset.EnableMappingsJson;
                     legionManager.LegionGamepadMapping.ForceSetValue(desktopMappingsJson);
                 }
                 else
@@ -638,19 +703,7 @@ namespace XboxGamingBarHelper
                     legionManager.LegionJoystickAsMouseMode.ForceSetValue(0);
 
                     // 2. Clear button mappings (empty JSON resets to defaults)
-                    string resetMappingsJson = @"{
-                        ""DPadUp"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""DPadDown"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""DPadLeft"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""DPadRight"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LSUp"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LSDown"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LSClick"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""A"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""B"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LB"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0},
-                        ""LT"":{""Type"":0,""GamepadAction"":0,""KeyboardKeys"":[],""MouseButton"":0}
-                    }";
+                    string resetMappingsJson = DesktopControlsPreset.DisableMappingsJson;
                     legionManager.LegionGamepadMapping.ForceSetValue(resetMappingsJson);
                 }
 
@@ -670,6 +723,47 @@ namespace XboxGamingBarHelper
         /// Parse and send a keyboard shortcut using InputInjector (works in widget context unlike SendInput)
         /// </summary>
         internal static void SendKeyboardShortcut(string shortcut) => SendKeyboardShortcutViaInputInjector(shortcut);
+
+        /// <summary>
+        /// Steam BPM menu chords (Ctrl+1 main menu, Ctrl+2 quick access). Steam ignores most
+        /// InputInjector events; prefer SendInput after focusing the Steam client. Legion R
+        /// can also be handled by firmware keyboard on M1 (see LegionManager).
+        /// Note: Ctrl+1/2 only work in Steam BPM/desktop — in-game use Shift+Tab / Ctrl+Shift+Tab.
+        /// </summary>
+        internal static void SendSteamBpmShortcut(int menuDigit)
+        {
+            if (menuDigit != 1 && menuDigit != 2) return;
+
+            string shortcut = $"Ctrl+{menuDigit}";
+            try
+            {
+                if (Windows.User32.TryFocusSteamClientWindow())
+                    Thread.Sleep(80);
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug($"SendSteamBpmShortcut: focus Steam failed: {ex.Message}");
+            }
+
+            if (Windows.User32.SendKeyboardShortcut(shortcut))
+            {
+                Logger.Info($"SendSteamBpmShortcut: sent {shortcut} via User32 SendInput");
+                return;
+            }
+
+            Logger.Warn($"SendSteamBpmShortcut: User32 failed for {shortcut}, trying InputInjector");
+            SendKeyboardShortcutViaInputInjector(shortcut);
+        }
+
+        internal static bool IsLegionRSteamQuickAccessFirmwareActive()
+        {
+            return legionManager?.IsLegionRSteamQuickAccessFirmwareActive ?? false;
+        }
+
+        internal static bool IsLegionLSteamMainMenuFirmwareActive()
+        {
+            return legionManager?.IsLegionLSteamMainMenuFirmwareActive ?? false;
+        }
 
         /// <summary>
         /// Parse and send a keyboard shortcut using InputInjector (works in widget context unlike SendInput)
@@ -692,7 +786,6 @@ namespace XboxGamingBarHelper
             try
             {
                 var parts = shortcut.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries);
-                var keyInfos = new List<InjectedInputKeyboardInfo>();
                 var modifierKeys = new List<ushort>();
                 var mainKeys = new List<ushort>(); // Support multiple non-modifier keys
 
@@ -798,38 +891,58 @@ namespace XboxGamingBarHelper
                     }
                 }
 
-                // Build key sequence: press modifiers, press all main keys, release all main keys in reverse, release modifiers
-                // Press modifiers
+                if (modifierKeys.Count == 0 && mainKeys.Count == 0)
+                {
+                    Logger.Warn($"No valid keys found in shortcut: {shortcut}");
+                    return;
+                }
+
+                // Inject chord keys in timed phases. A single InjectKeyboardInput batch
+                // delivers every down-event at once, which breaks apps like Steam BPM that
+                // require the modifier to be held before the main key (Ctrl then 1/2).
+                const int modifierHoldMs = 45;
+                const int keyHoldMs = 30;
+
                 foreach (var mod in modifierKeys)
-                {
-                    keyInfos.Add(new InjectedInputKeyboardInfo { VirtualKey = mod, KeyOptions = InjectedInputKeyOptions.None });
-                }
+                    InjectKeyboardKey(mod, keyUp: false);
 
-                // Press all main keys
+                if (modifierKeys.Count > 0 && mainKeys.Count > 0)
+                    Thread.Sleep(modifierHoldMs);
+
                 foreach (var key in mainKeys)
-                {
-                    keyInfos.Add(new InjectedInputKeyboardInfo { VirtualKey = key, KeyOptions = InjectedInputKeyOptions.None });
-                }
+                    InjectKeyboardKey(key, keyUp: false);
 
-                // Release all main keys in reverse order
+                if (mainKeys.Count > 0)
+                    Thread.Sleep(keyHoldMs);
+
                 for (int i = mainKeys.Count - 1; i >= 0; i--)
-                {
-                    keyInfos.Add(new InjectedInputKeyboardInfo { VirtualKey = mainKeys[i], KeyOptions = InjectedInputKeyOptions.KeyUp });
-                }
+                    InjectKeyboardKey(mainKeys[i], keyUp: true);
 
-                // Release modifiers in reverse order
+                if (mainKeys.Count > 0 && modifierKeys.Count > 0)
+                    Thread.Sleep(keyHoldMs);
+
                 for (int i = modifierKeys.Count - 1; i >= 0; i--)
-                {
-                    keyInfos.Add(new InjectedInputKeyboardInfo { VirtualKey = modifierKeys[i], KeyOptions = InjectedInputKeyOptions.KeyUp });
-                }
+                    InjectKeyboardKey(modifierKeys[i], keyUp: true);
 
-                inputInjector.InjectKeyboardInput(keyInfos);
                 Logger.Info($"Sent keyboard shortcut via InputInjector: {shortcut} (modifiers: {modifierKeys.Count}, keys: {mainKeys.Count})");
             }
             catch (Exception ex)
             {
                 Logger.Error($"Error sending keyboard shortcut '{shortcut}': {ex.Message}");
             }
+        }
+
+        private static void InjectKeyboardKey(ushort virtualKey, bool keyUp)
+        {
+            if (inputInjector == null) return;
+            inputInjector.InjectKeyboardInput(new[]
+            {
+                new InjectedInputKeyboardInfo
+                {
+                    VirtualKey = virtualKey,
+                    KeyOptions = keyUp ? InjectedInputKeyOptions.KeyUp : InjectedInputKeyOptions.None,
+                }
+            });
         }
     }
 

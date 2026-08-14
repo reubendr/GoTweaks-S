@@ -68,21 +68,50 @@ $successCount = 0
 $failCount = 0
 
 $templateScript = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.ps1"
+$pfxPath = Join-Path $PSScriptRoot "XboxGamingBarPackage_TemporaryKey.pfx"
 if (-not (Test-Path $templateScript)) {
     Write-Host "ERROR: Template script not found: $templateScript" -ForegroundColor Red
     exit 1
+}
+
+function Export-PackageSigningCertificate {
+    param(
+        [string]$OutputDir,
+        [string]$PfxPath
+    )
+    $cerPath = Join-Path $OutputDir "GoTweaksSigning.cer"
+    if (Test-Path $cerPath) { return $cerPath }
+    if (-not (Test-Path $PfxPath)) {
+        Write-Host "  WARN: PFX not found at $PfxPath - bundle .cer not exported" -ForegroundColor Yellow
+        return $null
+    }
+    try {
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+            $PfxPath, "", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+        Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
+        $cert.Dispose()
+        Write-Host "  Exported GoTweaksSigning.cer" -ForegroundColor Green
+        return $cerPath
+    }
+    catch {
+        Write-Host "  WARN: Failed to export signing .cer: $_" -ForegroundColor Yellow
+        return $null
+    }
 }
 
 foreach ($folder in $packageFolders) {
     $scriptPath = Join-Path $folder.FullName "Install GoTweaks.ps1"
     $exePath = Join-Path $folder.FullName "Install.exe"
 
-    # Copy our custom installer script to the package folder
-    Write-Host "  Copying Install GoTweaks.ps1 to $($folder.Name)..." -ForegroundColor Gray
+    # Copy our custom installer and overwrite MSBuild default Install.ps1
+    # (the stock one wraps Add-AppDevPackage.ps1 and needs a developer license).
+    Write-Host "  Copying custom installer to $($folder.Name)..." -ForegroundColor Gray
     Copy-Item -Path $templateScript -Destination $scriptPath -Force
+    Copy-Item -Path $templateScript -Destination (Join-Path $folder.FullName "Install.ps1") -Force
+    Export-PackageSigningCertificate -OutputDir $folder.FullName -PfxPath $pfxPath | Out-Null
 
     if (-not (Test-Path $scriptPath)) {
-        Write-Host "  SKIP: $($folder.Name) - Failed to copy 'Install GoTweaks.ps1'" -ForegroundColor Yellow
+        Write-Host "  SKIP: $($folder.Name) - Failed to copy Install GoTweaks.ps1" -ForegroundColor Yellow
         continue
     }
 
@@ -95,11 +124,11 @@ foreach ($folder in $packageFolders) {
         OutputFile = $exePath
         NoConsole = $false           # Keep console for user feedback
         RequireAdmin = $false        # Script handles elevation itself
-        Title = "GoTweaks Installer"
-        Description = "Installer for GoTweaks Xbox Game Bar Widget"
-        Company = "GoTweaks"
-        Product = "GoTweaks"
-        Copyright = "Copyright (c) GoTweaks"
+        Title = "GoTweaks S"
+        Description = "Installer for GoTweaks S Xbox Game Bar Widget"
+        Company = "GoTweaks S"
+        Product = "GoTweaks S"
+        Copyright = "Copyright (c) GoTweaks S"
         Version = "1.0.0.0"
     }
 

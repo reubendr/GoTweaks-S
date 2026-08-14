@@ -188,8 +188,10 @@
         // Legion Go Gamepad Button Remapping (per-game profile)
         LegionGamepadButtonMapping,     // string - JSON mapping of gamepad buttons to actions
 
-        // Legion Go Desktop Controls (preset: RS→Mouse, RT→LClick, LT→RClick, A→Enter, B→Esc)
+        // Legion Go Desktop Controls (preset: RS→Mouse, RT→LClick, LT→RClick, Steam-like layout)
         LegionDesktopControls,          // bool - desktop controls preset enabled
+        LegionDesktopAutoDisableInGame, // bool - auto-disable Desktop Controls when a game is detected
+        LegionLHoldForMouse,            // bool - hold Legion L for temporary mouse (SteamOS-style)
 
         // Legion Go Touchpad Vibration (GLOBAL setting)
         LegionTouchpadVibration,        // bool - on/off toggle for touchpad haptics
@@ -608,5 +610,10 @@
         // = identity, a no-op over the hardcoded per-target frame.
         Viiper_GyroTuning,          // string - gyroscope tuning matrix + inverts
         Viiper_AccelTuning,         // string - accelerometer tuning matrix + inverts
+
+        // Helper -> widget: LT/RT tab navigation while Desktop Controls owns the triggers.
+        // Content = "Previous" (LT) or "Next" (RT). Fired on press-edge only when the
+        // widget foreground signal is true so mouse-click remaps don't dismiss Game Bar.
+        WidgetTabNav,               // string - "Previous" | "Next"
     }
 }

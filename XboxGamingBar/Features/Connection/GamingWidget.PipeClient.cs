@@ -73,6 +73,13 @@ namespace XboxGamingBar
                     return;
                 }
 
+                // Helper forwards Sets from the other UI process (desktop app or widget).
+                // HandlePipeMessage only touches bound properties — it does not rebuild the
+                // controller-profile UI (gamepad/Y-M mappings, desktop overlay state, Labs remaps).
+                // Reload from shared LocalSettings instead.
+                if (TryHandleCrossProcessSharedStorageSync(message))
+                    return;
+
                 // TryGetValue, not indexer: string interpolation arguments are evaluated
                 // even when Debug logging is off, so a message without a "Function" key
                 // (e.g. HelperExiting notifications) would throw KeyNotFoundException
@@ -102,6 +109,20 @@ namespace XboxGamingBar
                     if (Dispatcher != null)
                     {
                         _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { _ = FocusThisWidgetAsync(); });
+                    }
+                    return;
+                }
+
+                // Desktop Controls LT/RT tab nav (helper forwards press-edges while widget is foreground).
+                if (message.TryGetValue("Function", out object tabNavFuncObj) &&
+                    Convert.ToInt32(tabNavFuncObj) == (int)Shared.Enums.Function.WidgetTabNav)
+                {
+                    if (Dispatcher != null &&
+                        message.TryGetValue("Content", out object tabNavContent) && tabNavContent is string direction
+                        && !string.IsNullOrEmpty(direction))
+                    {
+                        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                            () => HandleWidgetTabNavFromHelper(direction));
                     }
                     return;
                 }
@@ -234,6 +255,77 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"Error processing pipe message from helper: {ex.Message}");
+            }
+        }
+
+        private bool TryHandleCrossProcessSharedStorageSync(Windows.Foundation.Collections.ValueSet message)
+        {
+            if (!message.TryGetValue("Command", out object cmdObj)
+                || Convert.ToInt32(cmdObj) != (int)Shared.Enums.Command.Set)
+            {
+                return false;
+            }
+
+            // Request/response Sets carry a non-zero RequestId. Broadcasts from the helper
+            // (including Set forwards to the other UI client) use RequestId 0 or omit it.
+            if (message.TryGetValue("RequestId", out object reqObj) && Convert.ToInt32(reqObj) != 0)
+                return false;
+
+            if (!message.TryGetValue("Function", out object fnObj))
+                return false;
+
+            if (!IsSharedStorageSyncFunction((Function)Convert.ToInt32(fnObj)))
+                return false;
+
+            if (Dispatcher == null)
+                return true;
+
+            Logger.Info($"Cross-process remap sync via pipe ({(Function)Convert.ToInt32(fnObj)})");
+            RequestSyncSharedStorageFromPeer("pipe Set forward");
+            return true;
+        }
+
+        private static bool IsSharedStorageSyncFunction(Function function)
+        {
+            switch (function)
+            {
+                case Function.LegionButtonY1:
+                case Function.LegionButtonY2:
+                case Function.LegionButtonY3:
+                case Function.LegionButtonM1:
+                case Function.LegionButtonM2:
+                case Function.LegionButtonM3:
+                case Function.LegionButtonDesktop:
+                case Function.LegionButtonPage:
+                case Function.LegionGamepadButtonMapping:
+                case Function.LegionNintendoLayout:
+                case Function.LegionVibration:
+                case Function.LegionVibrationMode:
+                case Function.LegionGyroTarget:
+                case Function.LegionGyroSensitivityX:
+                case Function.LegionGyroSensitivityY:
+                case Function.LegionGyroInvertX:
+                case Function.LegionGyroInvertY:
+                case Function.LegionGyroMappingType:
+                case Function.LegionGyroActivationMode:
+                case Function.LegionGyroActivationButton:
+                case Function.LegionGyroDeadzone:
+                case Function.LegionLeftStickDeadzone:
+                case Function.LegionRightStickDeadzone:
+                case Function.LegionLeftTriggerStart:
+                case Function.LegionLeftTriggerEnd:
+                case Function.LegionRightTriggerStart:
+                case Function.LegionRightTriggerEnd:
+                case Function.LegionHairTriggers:
+                case Function.LegionJoystickAsMouseMode:
+                case Function.LegionJoystickMouseSens:
+                case Function.LegionDesktopControls:
+                case Function.LegionLHoldForMouse:
+                case Function.Labs_LegionButtonRemap:
+                case Function.Labs_LegionScrollRemap:
+                    return true;
+                default:
+                    return false;
             }
         }
 

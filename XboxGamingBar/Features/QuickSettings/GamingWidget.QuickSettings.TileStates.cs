@@ -37,6 +37,7 @@ using XboxGamingBar.Data;
 using XboxGamingBar.Event;
 using XboxGamingBar.IPC;
 using XboxGamingBar.QuickSettings;
+using Shared.Constants;
 using Shared.Enums;
 
 namespace XboxGamingBar
@@ -598,20 +599,22 @@ namespace XboxGamingBar
                     // (AMD Adrenalin overlay pass-through removed - RTSS only.)
                     {
                         int level = (int)(osd?.Value ?? 0);
-                        string levelText;
-                        switch (level)
-                        {
-                            case 0: levelText = "Off"; break;
-                            case 1: levelText = "Basic"; break;
-                            case 2: levelText = "Detailed"; break;
-                            case 3: levelText = "Full"; break;
-                            default: levelText = "Off"; break;
-                        }
+                        string levelText = OverlayLevels.GetShortName(level);
                         overlayTile.StateText.Text = levelText;
                         overlayTile.StateText.Foreground = level > 0 ? accentForeground : offForeground;
                         SetTileAccentBar(overlayTile, level > 0);
                         overlayTile.TileButton.Background = level > 0 ? tileOnBrush : tileOffBrush;
                     }
+                }
+
+                if (qsTileMap.TryGetValue("OSDColor", out var osdColorTile) && osdColorTile.TileButton != null)
+                {
+                    int idx = osdColorPresetIndex;
+                    if (idx < 0 || idx >= OsdColorPresets.Length) idx = 0;
+                    osdColorTile.StateText.Text = OsdColorPresets[idx].Label;
+                    osdColorTile.StateText.Foreground = idx > 0 ? accentForeground : offForeground;
+                    SetTileAccentBar(osdColorTile, idx > 0);
+                    osdColorTile.TileButton.Background = idx > 0 ? tileOnBrush : tileOffBrush;
                 }
 
                 // Power Mode tile - Win11: background/border stay neutral; the

@@ -71,7 +71,17 @@ namespace XboxGamingBar.Data
             Function.LegionLightColor,
             Function.LegionLightBrightness,
             Function.LegionLightSpeed,
-            Function.LegionPowerLight
+            Function.LegionPowerLight,
+            // Controller remaps — loaded from shared LocalSettings / controller profiles
+            Function.LegionGamepadButtonMapping,
+            Function.LegionButtonY1,
+            Function.LegionButtonY2,
+            Function.LegionButtonY3,
+            Function.LegionButtonM1,
+            Function.LegionButtonM2,
+            Function.LegionButtonM3,
+            Function.LegionButtonDesktop,
+            Function.LegionButtonPage
         };
 
         // Set to true during initial startup to skip widget-owned property sync (widget loaded from profiles/settings)

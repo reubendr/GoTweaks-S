@@ -129,6 +129,11 @@ namespace XboxGamingBar
 
             // Refresh Quick Settings tiles to show/hide Legion-specific tiles
             RefreshQuickSettingsForLegion();
+
+            if (DesktopMouseSection != null)
+            {
+                DesktopMouseSection.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         /// <summary>

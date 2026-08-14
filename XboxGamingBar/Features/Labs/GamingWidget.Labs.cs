@@ -44,7 +44,7 @@ namespace XboxGamingBar
     public sealed partial class GamingWidget
     {
         // Legion L/R Special Remapping combo indices (Click + Hold share the same list).
-        private const int LegionActionMaxUiIndex = 9;
+        private const int LegionActionMaxUiIndex = 7;
 
         private static int MapLegionActionUiIndexToHelperType(int selection)
         {
@@ -69,6 +69,8 @@ namespace XboxGamingBar
                 LegionRLongActionComboBox.SelectionChanged += (s2, e2) => LegionLongActionComboBox_SelectionChanged(false);
             if (LegionRActionComboBox != null)
                 LegionRActionComboBox.SelectionChanged += LegionRActionComboBox_SelectionChanged;
+            if (LegionLHoldForMouseToggle != null)
+                LegionLHoldForMouseToggle.Toggled += LegionLHoldForMouseToggle_Toggled;
 
             // Wire up Scroll wheel remap event handlers
             if (ScrollActionComboBox != null)
@@ -457,6 +459,8 @@ namespace XboxGamingBar
 
         private void SaveLegionRemapSettings()
         {
+            if (isReloadingSharedStorage) return;
+
             try
             {
                 var settings = ApplicationData.Current.LocalSettings;
@@ -481,6 +485,7 @@ namespace XboxGamingBar
                 settings.Values["LegionR_LongAction"] = LegionRLongActionComboBox?.SelectedIndex ?? 0;
                 settings.Values["LegionR_LongShortcut"] = GetKeysAsString("LegionRLong");
                 settings.Values["LegionR_LongCommand"] = (FindName("LegionRLongCommandTextBox") as TextBox)?.Text ?? "";
+                settings.Values["LegionL_HoldForMouse"] = LegionLHoldForMouseToggle?.IsOn ?? false;
 
                 // Also save to JSON fallback file for elevated helper
                 SaveToFallbackSettingsFile(new Dictionary<string, object>
@@ -494,6 +499,8 @@ namespace XboxGamingBar
                 });
 
                 Logger.Info("Legion remap settings saved");
+
+                App.NotifyPeerGamingWidgetsToSync(this, "legion remap");
             }
             catch (Exception ex)
             {
@@ -510,6 +517,8 @@ namespace XboxGamingBar
                 // Load Legion L settings
                 if (settings.Values.TryGetValue("LegionL_Action", out var lAction) && lAction is int lActionInt)
                 {
+                    if (lActionInt > LegionActionMaxUiIndex)
+                        lActionInt = 0; // migrate removed Steam BPM entries (old UI index 8/9)
                     if (LegionLActionComboBox != null && lActionInt >= 0 && lActionInt <= LegionActionMaxUiIndex)
                         LegionLActionComboBox.SelectedIndex = lActionInt;
                 }
@@ -526,6 +535,8 @@ namespace XboxGamingBar
                 // Load Legion R settings
                 if (settings.Values.TryGetValue("LegionR_Action", out var rAction) && rAction is int rActionInt)
                 {
+                    if (rActionInt > LegionActionMaxUiIndex)
+                        rActionInt = 0;
                     if (LegionRActionComboBox != null && rActionInt >= 0 && rActionInt <= LegionActionMaxUiIndex)
                         LegionRActionComboBox.SelectedIndex = rActionInt;
                 }
@@ -541,16 +552,24 @@ namespace XboxGamingBar
 
                 // Long-press variants
                 if (settings.Values.TryGetValue("LegionL_LongAction", out var lLongA) && lLongA is int lLongAi &&
-                    LegionLLongActionComboBox != null && lLongAi >= 0 && lLongAi <= LegionActionMaxUiIndex)
-                    LegionLLongActionComboBox.SelectedIndex = lLongAi;
+                    LegionLLongActionComboBox != null)
+                {
+                    if (lLongAi > LegionActionMaxUiIndex) lLongAi = 0;
+                    if (lLongAi >= 0 && lLongAi <= LegionActionMaxUiIndex)
+                        LegionLLongActionComboBox.SelectedIndex = lLongAi;
+                }
                 if (settings.Values.TryGetValue("LegionL_LongShortcut", out var lLongS) && lLongS is string lLongSs)
                     LoadKeysFromString("LegionLLong", lLongSs, FindName("LegionLLongKeyTags") as ItemsControl);
                 if (settings.Values.TryGetValue("LegionL_LongCommand", out var lLongC) && lLongC is string lLongCs &&
                     FindName("LegionLLongCommandTextBox") is TextBox lLongTb)
                     lLongTb.Text = lLongCs;
                 if (settings.Values.TryGetValue("LegionR_LongAction", out var rLongA) && rLongA is int rLongAi &&
-                    LegionRLongActionComboBox != null && rLongAi >= 0 && rLongAi <= LegionActionMaxUiIndex)
-                    LegionRLongActionComboBox.SelectedIndex = rLongAi;
+                    LegionRLongActionComboBox != null)
+                {
+                    if (rLongAi > LegionActionMaxUiIndex) rLongAi = 0;
+                    if (rLongAi >= 0 && rLongAi <= LegionActionMaxUiIndex)
+                        LegionRLongActionComboBox.SelectedIndex = rLongAi;
+                }
                 if (settings.Values.TryGetValue("LegionR_LongShortcut", out var rLongS) && rLongS is string rLongSs)
                     LoadKeysFromString("LegionRLong", rLongSs, FindName("LegionRLongKeyTags") as ItemsControl);
                 if (settings.Values.TryGetValue("LegionR_LongCommand", out var rLongC) && rLongC is string rLongCs &&
@@ -566,6 +585,13 @@ namespace XboxGamingBar
                 if (FindName("LegionRLongCommandGrid") is Grid rLongGrid)
                     rLongGrid.Visibility = (LegionRLongActionComboBox?.SelectedIndex ?? 0) == 3 ? Visibility.Visible : Visibility.Collapsed;
 
+                if (settings.Values.TryGetValue("LegionL_HoldForMouse", out var holdForMouse) && holdForMouse is bool holdForMouseBool
+                    && LegionLHoldForMouseToggle != null)
+                {
+                    LegionLHoldForMouseToggle.IsOn = holdForMouseBool;
+                }
+                UpdateLegionLHoldForMouseUi();
+
                 // Update description and show/hide input grids based on loaded settings
                 UpdateLegionRemapDescription();
                 int lSelectionLoaded = LegionLActionComboBox?.SelectedIndex ?? 0;
@@ -580,15 +606,18 @@ namespace XboxGamingBar
                     LegionRCommandGrid.Visibility = (rSelectionLoaded == 3) ? Visibility.Visible : Visibility.Collapsed;
 
                 // Also sync to JSON fallback file for elevated helper
-                SaveToFallbackSettingsFile(new Dictionary<string, object>
+                if (!isReloadingSharedStorage)
                 {
-                    { "LegionL_Action", LegionLActionComboBox?.SelectedIndex ?? 0 },
-                    { "LegionL_Shortcut", GetKeysAsString("LegionL") },
-                    { "LegionL_Command", LegionLCommandTextBox?.Text ?? "" },
-                    { "LegionR_Action", LegionRActionComboBox?.SelectedIndex ?? 0 },
-                    { "LegionR_Shortcut", GetKeysAsString("LegionR") },
-                    { "LegionR_Command", LegionRCommandTextBox?.Text ?? "" }
-                });
+                    SaveToFallbackSettingsFile(new Dictionary<string, object>
+                    {
+                        { "LegionL_Action", LegionLActionComboBox?.SelectedIndex ?? 0 },
+                        { "LegionL_Shortcut", GetKeysAsString("LegionL") },
+                        { "LegionL_Command", LegionLCommandTextBox?.Text ?? "" },
+                        { "LegionR_Action", LegionRActionComboBox?.SelectedIndex ?? 0 },
+                        { "LegionR_Shortcut", GetKeysAsString("LegionR") },
+                        { "LegionR_Command", LegionRCommandTextBox?.Text ?? "" }
+                    });
+                }
 
                 Logger.Info("Legion remap settings loaded");
             }
@@ -677,6 +706,39 @@ namespace XboxGamingBar
             catch (Exception ex)
             {
                 Logger.Error($"ApplyLegionButtonLongConfig failed: {ex.Message}");
+            }
+        }
+
+        private void LegionLHoldForMouseToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!labsSectionInitialized) return;
+            SaveLegionRemapSettings();
+            UpdateLegionLHoldForMouseUi();
+            if (LegionLHoldForMouseToggle?.IsOn == true)
+                ApplyLegionButtonLongConfig(true);
+            else
+                ApplyLegionButtonLongConfig(true);
+        }
+
+        private void UpdateLegionLHoldForMouseUi()
+        {
+            bool holdForMouse = LegionLHoldForMouseToggle?.IsOn ?? false;
+            bool enableHoldRow = !holdForMouse;
+            double opacity = holdForMouse ? 0.4 : 1.0;
+
+            if (FindName("LegionLLongHoldSection") is FrameworkElement holdSection)
+            {
+                holdSection.Opacity = opacity;
+                holdSection.IsHitTestVisible = enableHoldRow;
+            }
+            if (LegionLLongActionComboBox != null)
+                LegionLLongActionComboBox.IsEnabled = enableHoldRow;
+
+            if (LegionHoldMouseCaveatText != null)
+            {
+                LegionHoldMouseCaveatText.Visibility = holdForMouse
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
         }
 

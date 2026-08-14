@@ -2,6 +2,7 @@
 using Microsoft.Gaming.XboxGameBar.Input;
 using Microsoft.UI.Xaml.Controls;
 using NLog;
+using Shared.Constants;
 using Shared.Data;
 using Shared.Utilities;
 using System;
@@ -633,7 +634,7 @@ namespace XboxGamingBar
                 using (var httpClient = new HttpClient())
                 {
                     httpClient.DefaultRequestHeaders.Add("User-Agent", "GoTweaks-UpdateChecker");
-                    var response = await httpClient.GetStringAsync("https://api.github.com/repos/corando98/GoTweaks/releases/latest");
+                    var response = await httpClient.GetStringAsync($"https://api.github.com/repos/{GoTweaksUpdateConstants.GitHubRepoPath}/releases/latest");
 
                     // Parse JSON response using Windows.Data.Json
                     var jsonObject = Windows.Data.Json.JsonObject.Parse(response);
@@ -816,7 +817,7 @@ namespace XboxGamingBar
                     using (var httpClient = new HttpClient())
                     {
                         httpClient.DefaultRequestHeaders.Add("User-Agent", "GoTweaks-UpdateChecker");
-                        var response = await httpClient.GetStringAsync("https://api.github.com/repos/corando98/GoTweaks/releases/latest");
+                        var response = await httpClient.GetStringAsync($"https://api.github.com/repos/{GoTweaksUpdateConstants.GitHubRepoPath}/releases/latest");
 
                         var jsonObject = Windows.Data.Json.JsonObject.Parse(response);
                         remoteVersion = jsonObject.GetNamedString("tag_name", "");

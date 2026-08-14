@@ -1,4 +1,5 @@
-﻿using Shared.Data;
+﻿using Shared.Constants;
+using Shared.Data;
 using Shared.Enums;
 using System;
 using XboxGamingBarHelper.Core;
@@ -19,7 +20,7 @@ namespace XboxGamingBarHelper.OnScreenDisplay
             try
             {
                 int savedLevel = Properties.Settings.Default.OSDLevel;
-                if (savedLevel >= 0 && savedLevel <= 3)
+                if (savedLevel >= 0 && savedLevel <= OverlayLevels.Max)
                 {
                     Logger.Info($"Loaded OSD level {savedLevel} from settings");
                     return savedLevel;

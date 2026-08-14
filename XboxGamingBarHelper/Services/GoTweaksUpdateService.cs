@@ -1,3 +1,4 @@
+using Shared.Constants;
 using System;
 using System.Linq;
 using System.Net.Http;
@@ -13,9 +14,8 @@ namespace XboxGamingBarHelper.Services
     /// .msixbundle via PowerShell's Add-AppxPackage (helper runs elevated
     /// so the child inherits admin, and AppX install requires it).
     ///
-    /// Repo is hard-coded to the fork that ships the releases users install
-    /// from — <c>corando98/GoTweaks</c>. If we ever flip upstreams, change
-    /// <see cref="RepoPath"/> only.
+    /// Repo is configured in <see cref="GoTweaksUpdateConstants.GitHubRepoPath"/>
+    /// for this fork. Publish a release there to enable self-update installs.
     ///
     /// Everything here is defensive — network issues, API rate limits, or
     /// asset-naming changes produce an empty/update-not-found result rather
@@ -24,7 +24,7 @@ namespace XboxGamingBarHelper.Services
     /// </summary>
     internal static class GoTweaksUpdateService
     {
-        private const string RepoPath = "corando98/GoTweaks";
+        private static readonly string RepoPath = GoTweaksUpdateConstants.GitHubRepoPath;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private static readonly HttpClient _http = CreateHttpClient();
 
