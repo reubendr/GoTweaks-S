@@ -7,11 +7,12 @@ $notesPath = Join-Path $PSScriptRoot "release-notes-v0.3.2876.0.md"
 
 if (-not (Test-Path $pkg)) { throw "Package folder not found: $pkg" }
 $installCmd = Join-Path $pkg "Install GoTweaks.cmd"
-$installPs1 = Join-Path $pkg "Install GoTweaks.ps1"
+$installElevate = Join-Path $pkg "Elevate-And-Run.ps1"
+$installPs1 = Join-Path $pkg "Install-GoTweaks.ps1"
 $bundle = Join-Path $pkg "XboxGamingBarPackage_0.3.2876.0_x86_x64.msixbundle"
 $zipName = "GoTweaksS-0.3.2876.0.zip"
 $zipPath = Join-Path $PSScriptRoot "AppPackages\$zipName"
-foreach ($f in @($installCmd, $installPs1, $bundle, $notesPath)) {
+foreach ($f in @($installCmd, $installElevate, $installPs1, $bundle, $notesPath)) {
     if (-not (Test-Path $f)) { throw "Missing file: $f" }
 }
 
@@ -26,6 +27,8 @@ function New-InstallReleaseZip {
         New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
         Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.cmd") -Destination $staging -Force
+        Copy-Item -Path (Join-Path $SourceDir "Elevate-And-Run.ps1") -Destination $staging -Force
+        Copy-Item -Path (Join-Path $SourceDir "Install-GoTweaks.ps1") -Destination $staging -Force
         Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.ps1") -Destination $staging -Force
 
         $bundleFile = Get-ChildItem -Path $SourceDir -Filter "*.msixbundle" -ErrorAction Stop | Select-Object -First 1

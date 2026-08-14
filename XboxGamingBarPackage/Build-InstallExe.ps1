@@ -77,6 +77,7 @@ $failCount = 0
 
 $templateScript = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.ps1"
 $templateCmd = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.cmd"
+$templateElevate = Join-Path $PSScriptRoot "InstallTemplate\Elevate-And-Run.ps1"
 $pfxPath = Join-Path $PSScriptRoot "XboxGamingBarPackage_TemporaryKey.pfx"
 if (-not (Test-Path $templateScript)) {
     Write-Host "ERROR: Template script not found: $templateScript" -ForegroundColor Red
@@ -84,6 +85,10 @@ if (-not (Test-Path $templateScript)) {
 }
 if (-not (Test-Path $templateCmd)) {
     Write-Host "ERROR: Template launcher not found: $templateCmd" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $templateElevate)) {
+    Write-Host "ERROR: Elevation launcher not found: $templateElevate" -ForegroundColor Red
     exit 1
 }
 
@@ -114,6 +119,8 @@ function Export-PackageSigningCertificate {
 
 foreach ($folder in $packageFolders) {
     $scriptPath = Join-Path $folder.FullName "Install GoTweaks.ps1"
+    $scriptPathNoSpace = Join-Path $folder.FullName "Install-GoTweaks.ps1"
+    $elevatePath = Join-Path $folder.FullName "Elevate-And-Run.ps1"
     $cmdPath = Join-Path $folder.FullName "Install GoTweaks.cmd"
     $exePath = Join-Path $folder.FullName "Install.exe"
 
@@ -121,17 +128,19 @@ foreach ($folder in $packageFolders) {
     # (the stock one wraps Add-AppDevPackage.ps1 and needs a developer license).
     Write-Host "  Copying custom installer to $($folder.Name)..." -ForegroundColor Gray
     Copy-Item -Path $templateScript -Destination $scriptPath -Force
+    Copy-Item -Path $templateScript -Destination $scriptPathNoSpace -Force
     Copy-Item -Path $templateScript -Destination (Join-Path $folder.FullName "Install.ps1") -Force
     Copy-Item -Path $templateCmd -Destination $cmdPath -Force
+    Copy-Item -Path $templateElevate -Destination $elevatePath -Force
     Export-PackageSigningCertificate -OutputDir $folder.FullName -PfxPath $pfxPath | Out-Null
 
-    if (-not (Test-Path $scriptPath) -or -not (Test-Path $cmdPath)) {
+    if (-not (Test-Path $scriptPath) -or -not (Test-Path $cmdPath) -or -not (Test-Path $elevatePath)) {
         Write-Host "  SKIP: $($folder.Name) - Failed to copy installer scripts" -ForegroundColor Yellow
         $failCount++
         continue
     }
 
-    Write-Host "  SUCCESS: Install GoTweaks.cmd + Install GoTweaks.ps1" -ForegroundColor Green
+    Write-Host "  SUCCESS: Install GoTweaks.cmd + Elevate-And-Run.ps1 + Install-GoTweaks.ps1" -ForegroundColor Green
     $successCount++
 
     if (-not $BuildExe) {

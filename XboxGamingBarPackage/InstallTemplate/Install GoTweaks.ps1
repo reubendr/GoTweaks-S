@@ -569,13 +569,13 @@ $script:ScriptPath = Get-InstallerPath
 $ScriptDir = Get-InstallerDirectory
 Unblock-InstallerFiles -Dir $ScriptDir
 
-# Elevate before any UI - fixes double-click launches and Run-with-PowerShell
+# Must run elevated - Install GoTweaks.cmd handles UAC via Elevate-And-Run.ps1
 if (-not (Test-Administrator)) {
     Write-Host ""
-    Write-Host "  GoTweaks S Installer" -ForegroundColor Cyan
-    Write-Host "  Requesting Administrator access (approve the UAC prompt)..." -ForegroundColor Gray
+    Write-Host "  This installer must run as Administrator." -ForegroundColor Yellow
+    Write-Host "  Double-click Install GoTweaks.cmd in the extracted zip folder." -ForegroundColor Gray
     Write-Host ""
-    Request-Elevation
+    Exit-WithPause -ExitCode 1
 }
 
 Clear-Host
