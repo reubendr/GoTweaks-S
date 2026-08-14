@@ -73,6 +73,27 @@ catch {
 $patchBody = @{ body = $notesText; name = "GoTweaks S v0.3.2876.0" } | ConvertTo-Json -Compress
 Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/$($release.id)" -Method Patch -Headers $headers -Body $patchBody -ContentType "application/json; charset=utf-8" | Out-Null
 
+function Remove-ReleaseAssetsByName {
+    param([string[]]$Names, [hashtable]$Hdrs, [object]$Release)
+    foreach ($name in $Names) {
+        $existing = @($Release.assets) | Where-Object { $_.name -eq $name }
+        foreach ($asset in $existing) {
+            Write-Host "Removing stale asset $($asset.name)..."
+            Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/assets/$($asset.id)" -Method Delete -Headers $Hdrs | Out-Null
+        }
+    }
+}
+
+# Drop ps2exe installer and any misnamed uploads from earlier publishes
+Remove-ReleaseAssetsByName -Names @(
+    "Install.exe",
+    "Install.GoTweaks.cmd",
+    "Install.GoTweaks.ps1"
+) -Hdrs $headers -Release $release
+
+# Re-fetch so asset list matches GitHub before we upload replacements
+$release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers
+
 function Upload-ReleaseAsset {
     param([string]$Path, [hashtable]$Hdrs, [object]$Release)
     $name = [IO.Path]::GetFileName($Path)
