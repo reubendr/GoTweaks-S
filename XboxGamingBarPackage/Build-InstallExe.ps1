@@ -1,27 +1,13 @@
 <#
 .SYNOPSIS
-    Converts Install.ps1 to package installers for each *_Test folder.
+    Sets up InstallGoTweaks.cmd + _install payload for each *_Test package folder.
 
-    Always copies Install GoTweaks.ps1 + Install GoTweaks.cmd (recommended: double-click
-    the .cmd — plain PowerShell, auto-elevates, rarely flagged by Defender).
+    User-facing: only InstallGoTweaks.cmd at the package root. Package files live in _install\.
 
-    Optionally builds Install.exe via ps2exe (-BuildExe). ps2exe wrappers are often
-    reported as trojans/heuristics by Windows Defender even when harmless.
-
-.PARAMETER PackageDir
-    The AppPackages directory containing the built packages.
-
-.PARAMETER IconPath
-    Optional path to an ICO file for the EXE icon.
-
-.PARAMETER BuildExe
-    Also build Install.exe via ps2exe (may trigger antivirus false positives).
-
-.EXAMPLE
-    .\Build-InstallExe.ps1 -PackageDir ".\AppPackages"
+    Optionally builds Install.exe via ps2exe (-BuildExe). ps2exe wrappers are often flagged by AV.
 #>
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$PackageDir,
 
     [string]$IconPath = $null,
@@ -38,12 +24,11 @@ if ($BuildExe) {
     Write-Host "  (including Install.exe via ps2exe)" -ForegroundColor Gray
 }
 else {
-    Write-Host "  (Install GoTweaks.cmd + .ps1 only; pass -BuildExe for Install.exe)" -ForegroundColor Gray
+    Write-Host "  (InstallGoTweaks.cmd + _install\ only)" -ForegroundColor Gray
 }
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ps2exe only needed when building Install.exe
 if ($BuildExe) {
     if (-not (Get-Module -ListAvailable -Name ps2exe)) {
         Write-Host "Installing ps2exe module..." -ForegroundColor Yellow
@@ -62,9 +47,7 @@ if ($BuildExe) {
     Import-Module ps2exe -ErrorAction Stop
 }
 
-# Find package folders
 $packageFolders = Get-ChildItem -Path $PackageDir -Directory -Filter "*_Test" -ErrorAction SilentlyContinue
-
 if (-not $packageFolders -or $packageFolders.Count -eq 0) {
     Write-Host "No *_Test package folders found in: $PackageDir" -ForegroundColor Yellow
     exit 0
@@ -72,25 +55,25 @@ if (-not $packageFolders -or $packageFolders.Count -eq 0) {
 
 Write-Host "Found $($packageFolders.Count) package folder(s)" -ForegroundColor Gray
 
-$successCount = 0
-$failCount = 0
-
-$templateScript = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.ps1"
-$templateCmd = Join-Path $PSScriptRoot "InstallTemplate\Install GoTweaks.cmd"
-$templateElevate = Join-Path $PSScriptRoot "InstallTemplate\Elevate-And-Run.ps1"
+$templateScript = Join-Path $PSScriptRoot "InstallTemplate\_install\InstallGoTweaks.ps1"
+$templateCmd = Join-Path $PSScriptRoot "InstallTemplate\InstallGoTweaks.cmd"
 $pfxPath = Join-Path $PSScriptRoot "XboxGamingBarPackage_TemporaryKey.pfx"
-if (-not (Test-Path $templateScript)) {
-    Write-Host "ERROR: Template script not found: $templateScript" -ForegroundColor Red
-    exit 1
+
+foreach ($required in @($templateScript, $templateCmd)) {
+    if (-not (Test-Path $required)) {
+        Write-Host "ERROR: Template not found: $required" -ForegroundColor Red
+        exit 1
+    }
 }
-if (-not (Test-Path $templateCmd)) {
-    Write-Host "ERROR: Template launcher not found: $templateCmd" -ForegroundColor Red
-    exit 1
-}
-if (-not (Test-Path $templateElevate)) {
-    Write-Host "ERROR: Elevation launcher not found: $templateElevate" -ForegroundColor Red
-    exit 1
-}
+
+$legacyInstallerFiles = @(
+    "Install GoTweaks.cmd",
+    "Install GoTweaks.ps1",
+    "Install-GoTweaks.ps1",
+    "Elevate-And-Run.ps1",
+    "Install.ps1",
+    "Install.exe"
+)
 
 function Export-PackageSigningCertificate {
     param(
@@ -117,63 +100,92 @@ function Export-PackageSigningCertificate {
     }
 }
 
+function Move-IfExists {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationDir
+    )
+    if (-not (Test-Path -LiteralPath $SourcePath)) { return }
+    $dest = Join-Path $DestinationDir (Split-Path $SourcePath -Leaf)
+    if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force }
+    Move-Item -LiteralPath $SourcePath -Destination $dest -Force
+}
+
+$successCount = 0
+$failCount = 0
+
 foreach ($folder in $packageFolders) {
-    $scriptPath = Join-Path $folder.FullName "Install GoTweaks.ps1"
-    $scriptPathNoSpace = Join-Path $folder.FullName "Install-GoTweaks.ps1"
-    $elevatePath = Join-Path $folder.FullName "Elevate-And-Run.ps1"
-    $cmdPath = Join-Path $folder.FullName "Install GoTweaks.cmd"
-    $exePath = Join-Path $folder.FullName "Install.exe"
+    Write-Host "  Layout installer for $($folder.Name)..." -ForegroundColor Gray
 
-    # Copy our custom installer and overwrite MSBuild default Install.ps1
-    # (the stock one wraps Add-AppDevPackage.ps1 and needs a developer license).
-    Write-Host "  Copying custom installer to $($folder.Name)..." -ForegroundColor Gray
-    Copy-Item -Path $templateScript -Destination $scriptPath -Force
-    Copy-Item -Path $templateScript -Destination $scriptPathNoSpace -Force
-    Copy-Item -Path $templateScript -Destination (Join-Path $folder.FullName "Install.ps1") -Force
-    Copy-Item -Path $templateCmd -Destination $cmdPath -Force
-    Copy-Item -Path $templateElevate -Destination $elevatePath -Force
-    Export-PackageSigningCertificate -OutputDir $folder.FullName -PfxPath $pfxPath | Out-Null
+    $installDir = Join-Path $folder.FullName "_install"
+    New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
-    if (-not (Test-Path $scriptPath) -or -not (Test-Path $cmdPath) -or -not (Test-Path $elevatePath)) {
-        Write-Host "  SKIP: $($folder.Name) - Failed to copy installer scripts" -ForegroundColor Yellow
+    Copy-Item -Path $templateScript -Destination (Join-Path $installDir "InstallGoTweaks.ps1") -Force
+    Copy-Item -Path $templateCmd -Destination (Join-Path $folder.FullName "InstallGoTweaks.cmd") -Force
+
+    # Consolidate payload under _install (from root or leftover previous layouts)
+    foreach ($pattern in @("*.msixbundle", "*.cer")) {
+        Get-ChildItem -Path $folder.FullName -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Move-IfExists -SourcePath $_.FullName -DestinationDir $installDir
+        }
+        Get-ChildItem -Path $installDir -Filter $pattern -File -ErrorAction SilentlyContinue | Out-Null
+        Get-ChildItem -Path $folder.FullName -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Move-IfExists -SourcePath $_.FullName -DestinationDir $installDir
+        }
+    }
+
+    $rootDeps = Join-Path $folder.FullName "Dependencies"
+    $installDeps = Join-Path $installDir "Dependencies"
+    if ((Test-Path $rootDeps) -and -not (Test-Path $installDeps)) {
+        Move-Item -LiteralPath $rootDeps -Destination $installDeps -Force
+    }
+
+    Export-PackageSigningCertificate -OutputDir $installDir -PfxPath $pfxPath | Out-Null
+
+    foreach ($legacyName in $legacyInstallerFiles) {
+        $legacyPath = Join-Path $folder.FullName $legacyName
+        if (Test-Path -LiteralPath $legacyPath) {
+            Remove-Item -LiteralPath $legacyPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $cmdPath = Join-Path $folder.FullName "InstallGoTweaks.cmd"
+    $scriptPath = Join-Path $installDir "InstallGoTweaks.ps1"
+    $bundle = Get-ChildItem -Path $installDir -Filter "*.msixbundle" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if (-not (Test-Path $cmdPath) -or -not (Test-Path $scriptPath) -or -not $bundle) {
+        Write-Host "  SKIP: $($folder.Name) - missing InstallGoTweaks.cmd, script, or msixbundle" -ForegroundColor Yellow
         $failCount++
         continue
     }
 
-    Write-Host "  SUCCESS: Install GoTweaks.cmd + Elevate-And-Run.ps1 + Install-GoTweaks.ps1" -ForegroundColor Green
+    Write-Host "  SUCCESS: InstallGoTweaks.cmd + _install\" -ForegroundColor Green
     $successCount++
 
-    if (-not $BuildExe) {
-        continue
-    }
+    if (-not $BuildExe) { continue }
 
     Write-Host ""
     Write-Host "Converting: $($folder.Name) -> Install.exe" -ForegroundColor Cyan
+    $exePath = Join-Path $folder.FullName "Install.exe"
 
-    # Build ps2exe parameters
     $ps2exeParams = @{
-        InputFile = $scriptPath
-        OutputFile = $exePath
-        NoConsole = $false           # Keep console for user feedback
-        RequireAdmin = $false        # Script handles elevation itself
-        Title = "GoTweaks S"
-        Description = "Installer for GoTweaks S Xbox Game Bar Widget"
-        Company = "GoTweaks S"
-        Product = "GoTweaks S"
-        Copyright = "Copyright (c) GoTweaks S"
-        Version = "1.0.0.0"
+        InputFile    = $scriptPath
+        OutputFile   = $exePath
+        NoConsole    = $false
+        RequireAdmin = $false
+        Title        = "GoTweaks S"
+        Description  = "Installer for GoTweaks S Xbox Game Bar Widget"
+        Company      = "GoTweaks S"
+        Product      = "GoTweaks S"
+        Copyright    = "Copyright (c) GoTweaks S"
+        Version      = "1.0.0.0"
     }
-
-    # Add icon if provided and exists
     if ($IconPath -and (Test-Path $IconPath)) {
         $ps2exeParams.IconFile = $IconPath
-        Write-Host "  Using icon: $IconPath" -ForegroundColor Gray
     }
 
     try {
-        # ps2exe writes to host, capture it
         $null = Invoke-ps2exe @ps2exeParams 2>&1
-
         if (Test-Path $exePath) {
             $exeSize = (Get-Item $exePath).Length / 1KB
             Write-Host "  SUCCESS: Created Install.exe ($([math]::Round($exeSize, 1)) KB)" -ForegroundColor Green
@@ -194,7 +206,5 @@ Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "  Summary: $successCount succeeded, $failCount failed" -ForegroundColor White
 Write-Host "=============================================" -ForegroundColor Cyan
 
-if ($failCount -gt 0) {
-    exit 1
-}
+if ($failCount -gt 0) { exit 1 }
 exit 0

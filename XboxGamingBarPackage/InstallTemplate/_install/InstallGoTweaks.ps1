@@ -255,7 +255,7 @@ function Request-Elevation {
 
     if (-not $elevateScriptPath) {
         Write-Err "Cannot determine installer path for elevation."
-        Write-Host "Please right-click Install GoTweaks.cmd and choose Run as administrator." -ForegroundColor Yellow
+        Write-Host "Please run InstallGoTweaks.cmd again and click Yes on UAC." -ForegroundColor Yellow
         Exit-WithPause -ExitCode 1
     }
 
@@ -284,12 +284,13 @@ function Request-Elevation {
                 -ArgumentList $psArgs -PassThru -Wait
         }
 
-        $exitCode = if ($null -ne $proc.ExitCode) { $proc.ExitCode } else { 1 }
+        $exitCode = if ($null -ne $proc.ExitCode) { [int]$proc.ExitCode } else { 1 }
+        if ($exitCode -eq -196608) { $exitCode = 1 }
         exit $exitCode
     }
     catch {
         Write-Err "Failed to elevate to Administrator: $_"
-        Write-Host "UAC was cancelled or denied. Run Install GoTweaks.cmd again and click Yes." -ForegroundColor Yellow
+        Write-Host "UAC was cancelled or denied. Run InstallGoTweaks.cmd again and click Yes." -ForegroundColor Yellow
         Exit-WithPause -ExitCode 1
     }
 }
@@ -569,13 +570,13 @@ $script:ScriptPath = Get-InstallerPath
 $ScriptDir = Get-InstallerDirectory
 Unblock-InstallerFiles -Dir $ScriptDir
 
-# Must run elevated - Install GoTweaks.cmd handles UAC via Elevate-And-Run.ps1
+# Elevate before any UI (InstallGoTweaks.cmd launches this script from _install)
 if (-not (Test-Administrator)) {
     Write-Host ""
-    Write-Host "  This installer must run as Administrator." -ForegroundColor Yellow
-    Write-Host "  Double-click Install GoTweaks.cmd in the extracted zip folder." -ForegroundColor Gray
+    Write-Host "  GoTweaks S Installer" -ForegroundColor Cyan
+    Write-Host "  Click Yes on the Administrator (UAC) prompt..." -ForegroundColor Gray
     Write-Host ""
-    Exit-WithPause -ExitCode 1
+    Request-Elevation
 }
 
 Clear-Host
@@ -884,8 +885,8 @@ while ($retryCount -lt $maxRetries -and -not $installSuccess) {
             Write-Host "       Troubleshooting:" -ForegroundColor Yellow
             Write-Host "       - Close Xbox Game Bar (Win+G), then end XboxGamingBarHelper + PresentMon in Task Manager" -ForegroundColor Gray
             Write-Host "       - Disable the GoTweaksHelper scheduled task (Task Scheduler -> GoTweaks folder)" -ForegroundColor Gray
-            Write-Host "       - Reboot the Legion Go, then run Install GoTweaks.cmd -Force -CleanInstall as Admin" -ForegroundColor Gray
-            Write-Host "       - Use Install GoTweaks.cmd (or .ps1), NOT Add-AppDevPackage.ps1 or double-clicking the .msixbundle" -ForegroundColor Gray
+            Write-Host "       - Reboot the Legion Go, then run InstallGoTweaks.cmd -Force -CleanInstall as Admin" -ForegroundColor Gray
+            Write-Host "       - Use InstallGoTweaks.cmd, NOT Add-AppDevPackage.ps1 or double-clicking the .msixbundle" -ForegroundColor Gray
             Write-Host "       - For details: Get-AppPackageLog | Select-Object -Last 1 | ForEach-Object { notepad `$_.FullName }" -ForegroundColor Gray
             Exit-WithPause -ExitCode 1
         }

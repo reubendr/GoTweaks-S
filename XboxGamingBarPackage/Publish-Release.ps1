@@ -6,15 +6,17 @@ $pkg = Join-Path $PSScriptRoot "AppPackages\XboxGamingBarPackage_0.3.2876.0_Test
 $notesPath = Join-Path $PSScriptRoot "release-notes-v0.3.2876.0.md"
 
 if (-not (Test-Path $pkg)) { throw "Package folder not found: $pkg" }
-$installCmd = Join-Path $pkg "Install GoTweaks.cmd"
-$installElevate = Join-Path $pkg "Elevate-And-Run.ps1"
-$installPs1 = Join-Path $pkg "Install-GoTweaks.ps1"
-$bundle = Join-Path $pkg "XboxGamingBarPackage_0.3.2876.0_x86_x64.msixbundle"
-$zipName = "GoTweaksS-0.3.2876.0.zip"
-$zipPath = Join-Path $PSScriptRoot "AppPackages\$zipName"
-foreach ($f in @($installCmd, $installElevate, $installPs1, $bundle, $notesPath)) {
+$installCmd = Join-Path $pkg "InstallGoTweaks.cmd"
+$installDir = Join-Path $pkg "_install"
+$installPs1 = Join-Path $installDir "InstallGoTweaks.ps1"
+$bundleFile = Get-ChildItem -Path $installDir -Filter "*.msixbundle" -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $bundleFile) { throw "Missing msixbundle in $installDir" }
+foreach ($f in @($installCmd, $installPs1, $bundleFile.FullName, $notesPath)) {
     if (-not (Test-Path $f)) { throw "Missing file: $f" }
 }
+
+$zipName = "GoTweaksS-0.3.2876.0.zip"
+$zipPath = Join-Path $PSScriptRoot "AppPackages\$zipName"
 
 function New-InstallReleaseZip {
     param(
@@ -26,29 +28,9 @@ function New-InstallReleaseZip {
     try {
         New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
-        Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.cmd") -Destination $staging -Force
-        Copy-Item -Path (Join-Path $SourceDir "Elevate-And-Run.ps1") -Destination $staging -Force
-        Copy-Item -Path (Join-Path $SourceDir "Install-GoTweaks.ps1") -Destination $staging -Force
-        Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.ps1") -Destination $staging -Force
-
-        $bundleFile = Get-ChildItem -Path $SourceDir -Filter "*.msixbundle" -ErrorAction Stop | Select-Object -First 1
-        Copy-Item -Path $bundleFile.FullName -Destination $staging -Force
-
-        $cerFiles = Get-ChildItem -Path $SourceDir -Filter "*.cer" -ErrorAction SilentlyContinue
-        foreach ($cer in $cerFiles) {
-            Copy-Item -Path $cer.FullName -Destination $staging -Force
-        }
-        if (-not $cerFiles -or $cerFiles.Count -eq 0) {
-            throw "No .cer signing certificate found in $SourceDir"
-        }
-
-        $depsDir = Join-Path $SourceDir "Dependencies"
-        if (Test-Path $depsDir) {
-            Copy-Item -Path $depsDir -Destination (Join-Path $staging "Dependencies") -Recurse -Force
-        }
-        else {
-            throw "Dependencies folder not found in $SourceDir"
-        }
+        Copy-Item -Path (Join-Path $SourceDir "InstallGoTweaks.cmd") -Destination $staging -Force
+        Copy-Item -Path (Join-Path $SourceDir "_install") -Destination (Join-Path $staging "_install") -Recurse -Force
+        attrib +h (Join-Path $staging "_install") | Out-Null
 
         if (Test-Path $DestinationZip) { Remove-Item $DestinationZip -Force }
         Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $DestinationZip -Force

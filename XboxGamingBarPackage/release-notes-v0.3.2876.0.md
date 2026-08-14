@@ -4,13 +4,13 @@ A Legion Go-focused fork of [GoTweaks](https://github.com/corando98/GoTweaks) wi
 
 ### Install
 
-1. Download **`GoTweaksS-0.3.2876.0.zip`** below (the full install package — do **not** download the `.cmd` / `.ps1` / `.msixbundle` separately)
+1. Download **`GoTweaksS-0.3.2876.0.zip`** below
 2. Extract the zip to a folder (e.g. Desktop\GoTweaksS)
-3. Double-click **`Install GoTweaks.cmd`** inside that folder (not the `.ps1` directly) and click **Yes** on the UAC prompt
+3. Double-click **`InstallGoTweaks.cmd`** and click **Yes** on the UAC prompt
 4. Open **Xbox Game Bar** (`Win+G`) and pin the GoTweaks widget
 5. Optional: launch **GoTweaks** from Start for the full desktop app (same settings, stays in sync with the widget)
 
-> **Note:** The installer must stay in the same folder as the `.msixbundle`, `.cer`, and `Dependencies` folder — that is why everything is bundled in one zip. Do not use `Install.exe` (ps2exe); it often triggers Windows Defender false positives.
+> **Note:** Only **`InstallGoTweaks.cmd`** is shown at the top level. Package files live in the `_install` folder (do not delete it).
 
 ---
 
