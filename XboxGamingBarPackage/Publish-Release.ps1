@@ -9,9 +9,55 @@ if (-not (Test-Path $pkg)) { throw "Package folder not found: $pkg" }
 $installCmd = Join-Path $pkg "Install GoTweaks.cmd"
 $installPs1 = Join-Path $pkg "Install GoTweaks.ps1"
 $bundle = Join-Path $pkg "XboxGamingBarPackage_0.3.2876.0_x86_x64.msixbundle"
+$zipName = "GoTweaksS-0.3.2876.0.zip"
+$zipPath = Join-Path $PSScriptRoot "AppPackages\$zipName"
 foreach ($f in @($installCmd, $installPs1, $bundle, $notesPath)) {
     if (-not (Test-Path $f)) { throw "Missing file: $f" }
 }
+
+function New-InstallReleaseZip {
+    param(
+        [string]$SourceDir,
+        [string]$DestinationZip
+    )
+
+    $staging = Join-Path ([IO.Path]::GetTempPath()) ("GoTweaksS-staging-" + [guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+        Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.cmd") -Destination $staging -Force
+        Copy-Item -Path (Join-Path $SourceDir "Install GoTweaks.ps1") -Destination $staging -Force
+
+        $bundleFile = Get-ChildItem -Path $SourceDir -Filter "*.msixbundle" -ErrorAction Stop | Select-Object -First 1
+        Copy-Item -Path $bundleFile.FullName -Destination $staging -Force
+
+        $cerFiles = Get-ChildItem -Path $SourceDir -Filter "*.cer" -ErrorAction SilentlyContinue
+        foreach ($cer in $cerFiles) {
+            Copy-Item -Path $cer.FullName -Destination $staging -Force
+        }
+        if (-not $cerFiles -or $cerFiles.Count -eq 0) {
+            throw "No .cer signing certificate found in $SourceDir"
+        }
+
+        $depsDir = Join-Path $SourceDir "Dependencies"
+        if (Test-Path $depsDir) {
+            Copy-Item -Path $depsDir -Destination (Join-Path $staging "Dependencies") -Recurse -Force
+        }
+        else {
+            throw "Dependencies folder not found in $SourceDir"
+        }
+
+        if (Test-Path $DestinationZip) { Remove-Item $DestinationZip -Force }
+        Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $DestinationZip -Force
+        Write-Host "Created install zip: $DestinationZip ($([math]::Round((Get-Item $DestinationZip).Length / 1MB, 1)) MB)"
+    }
+    finally {
+        Remove-Item -Path $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Write-Host "Building release zip (installer + bundle + cert + dependencies)..."
+New-InstallReleaseZip -SourceDir $pkg -DestinationZip $zipPath
 
 $credIn = "protocol=https`nhost=github.com`n`n"
 $credOut = $credIn | git credential fill
@@ -84,11 +130,15 @@ function Remove-ReleaseAssetsByName {
     }
 }
 
-# Drop ps2exe installer and any misnamed uploads from earlier publishes
+# Drop loose installers / old uploads — users must download the full zip
 Remove-ReleaseAssetsByName -Names @(
     "Install.exe",
+    "Install GoTweaks.cmd",
+    "Install GoTweaks.ps1",
     "Install.GoTweaks.cmd",
-    "Install.GoTweaks.ps1"
+    "Install.GoTweaks.ps1",
+    "XboxGamingBarPackage_0.3.2876.0_x86_x64.msixbundle",
+    $zipName
 ) -Hdrs $headers -Release $release
 
 # Re-fetch so asset list matches GitHub before we upload replacements
@@ -110,9 +160,7 @@ function Upload-ReleaseAsset {
     Invoke-RestMethod -Uri $uri -Method Post -Headers $uploadHeaders -InFile $Path | Out-Null
 }
 
-foreach ($asset in @($installCmd, $installPs1, $bundle)) {
-    Upload-ReleaseAsset -Path $asset -Hdrs $headers -Release $release
-}
+Upload-ReleaseAsset -Path $zipPath -Hdrs $headers -Release $release
 
 Write-Host ""
 Write-Host "Published: $($release.html_url)" -ForegroundColor Green
